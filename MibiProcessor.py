@@ -5,6 +5,8 @@ from tifffile import TiffFile
 from MibiHelper import MibiLoader
 from MibiHelper import MibiEroder
 import matplotlib.pyplot as plt
+import networkx as nx
+from skimage.measure import label, regionprops
 
 #If you dont have the expression wise numpys generate them
 save_directory=r'D:\MIBI-TOFF\Data'
@@ -68,9 +70,12 @@ for file in filtered_files:
              segmentation=segmentation)
 
 '''
-directory = save_directory  
 
-# List all files in the directory
+
+# Errosion Loops
+
+'''
+directory = save_directory  
 file_list = os.listdir(directory)
 
 filtered_files = [file for file in file_list if file.endswith("_segmentations.npz")]
@@ -98,6 +103,81 @@ for file in filtered_files:
     plt.tight_layout()
 
     plt.savefig(desired_part+'erroded_fig.png')  # Change the file format as needed (e.g., .jpg, .pdf, .svg)
+
+'''
+#This is a test for conversion to a graph
+data_catch=np.load('D:\MIBI-TOFF\Data\FOV1_G4_segmentations.npz',allow_pickle=True)
+segmentation=data_catch['segmentation']
+
+segmentation = np.array([[1, 1, 0, 2, 2],
+                         [0, 1, 0, 2, 0],
+                         [3, 0, 0, 2, 2],
+                         [3, 0, 4, 4, 4],
+                         [1, 1, 0, 2, 2],
+                         [1, 1, 0, 2, 2]])
+
+labeled_segments = label(segmentation)
+
+# Define the maximum distance for nodes to be connected (100 pixels in this example)
+max_distance = 3
+
+# Create a graph
+G = nx.Graph()
+
+# Iterate through the labeled segments to create nodes
+for region in regionprops(labeled_segments):
+    segment_label = region.label
+    
+    # Encode additional information into the node attributes
+    node_attributes = {
+        'cell_type': region.label,  # Replace with the actual cell type
+        'area': region.area,     # Area of the cell
+        'centroid': region.centroid  # Centroid coordinates
+    }
+    
+    G.add_node(segment_label, **node_attributes)
+
+# Connect nodes if their corresponding regions are within the maximum distance
+centroids = {}
+for region in regionprops(labeled_segments):
+    segment_label = region.label
+    centroids[segment_label] = region.centroid
+
+    # Store the original segment value as an attribute
+    node_attributes = {
+        'cell_type': 'Type A',  # Replace with the actual cell type
+        'area': region.area,     # Area of the cell
+        'centroid': region.centroid,  # Centroid coordinates
+        'original_segment_value': segment_label  # Store the original segment value
+    }
+
+    G.add_node(segment_label, **node_attributes)
+
+# Connect nodes if their corresponding regions are within the maximum distance
+for region in regionprops(labeled_segments):
+    segment_label = region.label
+    for neighbor_label, neighbor_centroid in centroids.items():
+        if neighbor_label != segment_label:
+            distance = np.sqrt((region.centroid[0] - neighbor_centroid[0])**2 + (region.centroid[1] - neighbor_centroid[1])**2)
+            if distance <= max_distance:
+                G.add_edge(segment_label, neighbor_label)
+
+
+# Visualize the graph
+pos = nx.spring_layout(G)  # Layout for visualization
+nx.draw(G, pos, with_labels=True, node_size=300, node_color='lightblue', font_size=10)
+plt.show()
+
+node_label = 5
+node_attributes = G.nodes[node_label]
+
+# Print or display the attributes
+print("Attributes of Node {}: {}".format(node_label, node_attributes))
+
+
+
+
+
 
 
 
