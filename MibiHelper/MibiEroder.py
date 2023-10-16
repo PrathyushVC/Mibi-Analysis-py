@@ -21,6 +21,7 @@ import cv2
 import matplotlib.pyplot as plt
 import time
 
+
 def MibiEroder(segmentation):
     if segmentation is None:
         raise ValueError("segmentation is empty . It should have a valid value.")

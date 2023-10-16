@@ -10,13 +10,13 @@ from skimage.measure import label, regionprops
 
 #If you dont have the expression wise numpys generate them
 save_directory=r'D:\MIBI-TOFF\Data'
-#MibiLoader(root=None, expressiontypes=None, grps=None, T_path=None,save_directory=r'D:\MIBI-TOFF\Data')
+MibiLoader(root=r'D:\MIBI-TOFF\Data_For_Amos', expressiontypes=None, T_path=None,save_directory=r'D:\MIBI-TOFF\Data_Full')
 
 
 '''
 #data_catch=np.load(r'D:\MIBI-TOFF\Data\FOV1_G3_CD4.npz')
 #print(data_catch.files)
-plt.figure()
+plt.figure()dir\
 im = plt.imshow(data_catch['imageData'], 'gray')
 plt.title('ImageData')
 
@@ -31,6 +31,7 @@ plt.title('Clustered_Seg')
 plt.show()
 
 '''
+
 directory = save_directory  
 
 # List all files in the directory
@@ -107,76 +108,67 @@ for file in filtered_files:
 '''
 #This is a test for conversion to a graph
 data_catch=np.load('D:\MIBI-TOFF\Data\FOV1_G4_segmentations.npz',allow_pickle=True)
-segmentation=data_catch['segmentation']
+segmentation=data_catch['erroded_mask']
+remove_non_cells=data_catch['clustered_seg']
 
-segmentation = np.array([[1, 1, 0, 2, 2],
-                         [0, 1, 0, 2, 0],
-                         [3, 0, 0, 2, 2],
-                         [3, 0, 4, 4, 4],
-                         [1, 1, 0, 2, 2],
-                         [1, 1, 0, 2, 2]])
+print(np.shape(segmentation))
+#This is to test how we can easily remove types that are not useful or to reduce the space down to a single cell type
+values_to_set_to_zero=[1,7,8,9]
+# Create a boolean mask for the values to be set to zero
+mask = np.isin(data_catch['clustered_seg'], values_to_set_to_zero)
 
-labeled_segments = label(segmentation)
+# Set the values to zero using the mask
+remove_non_cells[mask] = 0
+remove_non_cells[remove_non_cells>0]=1
+
+segmentation=segmentation*remove_non_cells
+
+
+
+#The bellow line would have relabled the image but not needed due to the nature of our image
+#labeled_segments = label(segmentation)
+print(list(data_catch.keys()))
+print(data_catch['FOV_table'])
+FOV_table = pd.DataFrame(data_catch['FOV_table'])
 
 # Define the maximum distance for nodes to be connected (100 pixels in this example)
-max_distance = 3
+max_distance = 25
 
 # Create a graph
+
+
 G = nx.Graph()
+# Extract centroids into a NumPy array
+centroids = np.array([region.centroid for region in regionprops(segmentation)])
 
-# Iterate through the labeled segments to create nodes
-for region in regionprops(labeled_segments):
-    segment_label = region.label
-    
-    # Encode additional information into the node attributes
-    node_attributes = {
-        'cell_type': region.label,  # Replace with the actual cell type
-        'area': region.area,     # Area of the cell
-        'centroid': region.centroid  # Centroid coordinates
-    }
-    
-    G.add_node(segment_label, **node_attributes)
+# Compute pairwise Euclidean distances between centroids
+distances = np.linalg.norm(centroids[:, None] - centroids, axis=2)
 
-# Connect nodes if their corresponding regions are within the maximum distance
-centroids = {}
-for region in regionprops(labeled_segments):
-    segment_label = region.label
-    centroids[segment_label] = region.centroid
+# Set the maximum distance threshold
+max_distance = 25
 
-    # Store the original segment value as an attribute
-    node_attributes = {
-        'cell_type': 'Type A',  # Replace with the actual cell type
-        'area': region.area,     # Area of the cell
-        'centroid': region.centroid,  # Centroid coordinates
-        'original_segment_value': segment_label  # Store the original segment value
-    }
+# Create a mapping from node indices to regions
+node_to_region = {}
 
-    G.add_node(segment_label, **node_attributes)
+# Add nodes to the graph
+for i, region in enumerate(regionprops(segmentation)):
+    node_to_region[i] = region
+    G.add_node(i, cell_type='Type A', area=region.area, centroid=region.centroid, segment_label = segmentation[int(region.centroid[0]), int(region.centroid[1])])
 
-# Connect nodes if their corresponding regions are within the maximum distance
-for region in regionprops(labeled_segments):
-    segment_label = region.label
-    for neighbor_label, neighbor_centroid in centroids.items():
-        if neighbor_label != segment_label:
-            distance = np.sqrt((region.centroid[0] - neighbor_centroid[0])**2 + (region.centroid[1] - neighbor_centroid[1])**2)
-            if distance <= max_distance:
-                G.add_edge(segment_label, neighbor_label)
+# Create edges based on the distances while ensuring nodes exist
+for i in range(len(distances)):
+    for j in range(i + 1, len(distances)):
+        if distances[i, j] <= max_distance:
+            G.add_edge(i, j)
 
+plt.figure()
+segshow = plt.imshow(segmentation, 'gray')
+plt.title('Segmentation')
 
 # Visualize the graph
+plt.figure()
 pos = nx.spring_layout(G)  # Layout for visualization
 nx.draw(G, pos, with_labels=True, node_size=300, node_color='lightblue', font_size=10)
-plt.show()
-
-node_label = 5
-node_attributes = G.nodes[node_label]
-
-# Print or display the attributes
-print("Attributes of Node {}: {}".format(node_label, node_attributes))
-
-
-
-
 
 
 
