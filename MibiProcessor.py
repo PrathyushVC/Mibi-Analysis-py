@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from skimage.measure import label, regionprops
 
+# Initialize Ray and connect to the cluster
+
 #If you dont have the expression wise numpys generate them
 save_directory=r'D:\MIBI-TOFF\Data'
 MibiLoader(root=r'D:\MIBI-TOFF\Data_For_Amos', expressiontypes=None, T_path=None,save_directory=r'D:\MIBI-TOFF\Data_Full')
@@ -140,7 +142,7 @@ max_distance = 25
 G = nx.Graph()
 # Extract centroids into a NumPy array
 centroids = np.array([region.centroid for region in regionprops(segmentation)])
-
+''''''
 # Compute pairwise Euclidean distances between centroids
 distances = np.linalg.norm(centroids[:, None] - centroids, axis=2)
 

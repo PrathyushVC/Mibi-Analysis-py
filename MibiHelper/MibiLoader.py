@@ -20,6 +20,8 @@ import pandas as pd
 from tifffile import TiffFile
 import json
 import warnings
+import concurrent.futures 
+
 
 def MibiLoader(root=None, expressiontypes=None, T_path=None,save_directory = None,):
     # Check if the inputs are not provided and provide default values It is done this way as several of the inputs are long paths and made the function def really hard to read
@@ -58,40 +60,48 @@ def MibiLoader(root=None, expressiontypes=None, T_path=None,save_directory = Non
             json.dump(cluster_map, json_file)
         np.save('clusters.npy',clusters)
     
-    celltype_range_track = {}
-    tracker = 1
     #Create a dictionary of all the FOV and patient combinations. This can be returned if needed 
     #As we will need to do this anyway  seems easier to do at the start
     fov_to_patient_map = dict(zip(T['fov'], T['patient number']))
 
+
     dirlist = os.listdir(root)
-    for dirname in dirlist:
-        if os.path.isdir(os.path.join(root,dirname)):
-            segmentation_path = os.path.join(root,dirname,'TIFs', 'segmentation_labels.tiff')
-            FOV_table = T[T['fov'] == dirname]
-            # Replace with the FOV you want to look up
-            patient_number = fov_to_patient_map.get(dirname, 'Unknown')  # Use 'Unknown' or a default value if FOV is not found
-            print(patient_number)
-            with TiffFile(segmentation_path) as tif:
-                segmentation = tif.asarray()
-            clustered_seg = segmentation_grouper(segmentation, FOV_table, clusters, cluster_map)
+    #This part of the loop or the expression loop could be parrallized
+    num_threads = min(len(dirlist), os.cpu_count()-10)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+        for dirname in dirlist:
+            if os.path.isdir(os.path.join(root,dirname)):
+                executor.submit(process_directory, root, dirname, expressiontypes, clusters, cluster_map, T,fov_to_patient_map, save_directory)
+
             
-            for expression_type in expressiontypes:
-                save_path = f"{dirname}_{expression_type}.npz"
-                save_patient_dir=os.path.join(save_directory, f'PN{patient_number}')
-                if not os.path.exists(save_patient_dir):
-                    # If it doesn't exist, create the directory
-                    os.makedirs(save_patient_dir)
-                tiff_path = os.path.join(root,dirname,'TIFs', f'{expression_type}.tif')
-                with TiffFile(tiff_path) as tif:
-                    image_data = tif.asarray()
-                unique_labels = np.unique(image_data)
-                celltype_range_track[(tracker, expression_type)] = unique_labels
-                save_path = f"{dirname}_PN{patient_number}_{expression_type}.npz"
-                save_path=os.path.join(save_patient_dir, save_path)
-                print(save_path)
-                np.savez(save_path, imageData=image_data, FOV_table=FOV_table, clustered_seg=clustered_seg, segmentation=segmentation)
-                tracker += 1
+def process_directory(root, dirname, expressiontypes, clusters, cluster_map,T, fov_to_patient_map,save_directory):
+    segmentation_path = os.path.join(root,dirname,'TIFs', 'segmentation_labels.tiff')
+    FOV_table = T[T['fov'] == dirname]
+    # Replace with the FOV you want to look up
+    patient_number = fov_to_patient_map.get(dirname, 'Unknown')  # Use 'Unknown' or a default value if FOV is not found
+    print(patient_number)
+
+    save_patient_dir=os.path.join(save_directory, f'PN{patient_number}')
+    if not os.path.exists(save_patient_dir):
+        # If it doesn't exist, create the directory
+        os.makedirs(save_patient_dir)
+
+    with TiffFile(segmentation_path) as tif:
+        segmentation = tif.asarray()
+    clustered_seg = segmentation_grouper(segmentation, FOV_table, clusters, cluster_map)
+    
+    for expression_type in expressiontypes:
+        save_path = f"{dirname}_{expression_type}.npz"
+        
+        tiff_path = os.path.join(root,dirname,'TIFs', f'{expression_type}.tif')
+        with TiffFile(tiff_path) as tif:
+            image_data = tif.asarray()
+        unique_labels = np.unique(image_data)
+        save_path = f"{dirname}_PN{patient_number}_{expression_type}.npz"
+        save_path=os.path.join(save_patient_dir, save_path)
+        print(save_path)
+        np.savez(save_path, imageData=image_data, FOV_table=FOV_table, clustered_seg=clustered_seg, segmentation=segmentation)
+     
 
 def segmentation_grouper(segmentation, T, clusters, cluster_map):
     clustered_seg = np.zeros(segmentation.shape, dtype=int)
