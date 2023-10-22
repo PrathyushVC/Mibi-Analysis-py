@@ -1,18 +1,20 @@
-import os
+import os,cv2
 import numpy as np
 import pandas as pd
 from tifffile import TiffFile
 from MibiHelper import MibiLoader
 from MibiHelper import MibiEroder
+from GraphGenerator import ProximityFinder as proxF
 import matplotlib.pyplot as plt
 import networkx as nx
 from skimage.measure import label, regionprops
-
 # Initialize Ray and connect to the cluster
 
+
+
 #If you dont have the expression wise numpys generate them
-save_directory=r'D:\MIBI-TOFF\Data'
-MibiLoader(root=r'D:\MIBI-TOFF\Data_For_Amos', expressiontypes=None, T_path=None,save_directory=r'D:\MIBI-TOFF\Data_Full')
+#save_directory=r'D:\MIBI-TOFF\Data'
+#MibiLoader(root=r'D:\MIBI-TOFF\Data_For_Amos', expressiontypes=None, T_path=None,save_directory=r'D:\MIBI-TOFF\Data_Full')
 
 
 '''
@@ -33,7 +35,7 @@ plt.title('Clustered_Seg')
 plt.show()
 
 '''
-
+'''
 directory = save_directory  
 
 # List all files in the directory
@@ -41,7 +43,7 @@ file_list = os.listdir(directory)
 
 # Filter files that end with "_CD4.npz"
 #This is for testing in the future I think these individual files wont have the these redundent info in them and instead a single seg file with be made per patient
-
+'''
 
 '''
 filtered_files = [file for file in file_list if file.endswith("_CD4.npz")]
@@ -113,17 +115,18 @@ data_catch=np.load('D:\MIBI-TOFF\Data\FOV1_G4_segmentations.npz',allow_pickle=Tr
 segmentation=data_catch['erroded_mask']
 remove_non_cells=data_catch['clustered_seg']
 
+segmentation=segmentation
+remove_non_cells=remove_non_cells
+
 print(np.shape(segmentation))
 #This is to test how we can easily remove types that are not useful or to reduce the space down to a single cell type
 values_to_set_to_zero=[1,7,8,9]
 # Create a boolean mask for the values to be set to zero
-mask = np.isin(data_catch['clustered_seg'], values_to_set_to_zero)
+mask = np.isin(remove_non_cells, values_to_set_to_zero)
 
 # Set the values to zero using the mask
 remove_non_cells[mask] = 0
 remove_non_cells[remove_non_cells>0]=1
-
-segmentation=segmentation*remove_non_cells
 
 
 
@@ -133,19 +136,23 @@ print(list(data_catch.keys()))
 print(data_catch['FOV_table'])
 FOV_table = pd.DataFrame(data_catch['FOV_table'])
 
+centroids,regions=proxF.centroid_compute(segmentation=segmentation,region_mask=remove_non_cells)
+
+segmentation=segmentation*remove_non_cells
+
+#centroids2 = np.array([region.centroid for region in regionprops(segmentation)])
 # Define the maximum distance for nodes to be connected (100 pixels in this example)
 max_distance = 25
-
 # Create a graph
-
-
 G = nx.Graph()
 # Extract centroids into a NumPy array
-centroids = np.array([region.centroid for region in regionprops(segmentation)])
-''''''
+distances=proxF.dist_comp(centroids, num_chunks=1)
+'''
+
+
 # Compute pairwise Euclidean distances between centroids
 distances = np.linalg.norm(centroids[:, None] - centroids, axis=2)
-
+'''
 # Set the maximum distance threshold
 max_distance = 25
 
@@ -166,11 +173,11 @@ for i in range(len(distances)):
 plt.figure()
 segshow = plt.imshow(segmentation, 'gray')
 plt.title('Segmentation')
-
+print(G)
 # Visualize the graph
-plt.figure()
-pos = nx.spring_layout(G)  # Layout for visualization
-nx.draw(G, pos, with_labels=True, node_size=300, node_color='lightblue', font_size=10)
+#plt.figure()
+#pos = nx.spring_layout(G)  # Layout for visualization
+#nx.draw(G, pos, with_labels=True, node_size=300, node_color='lightblue', font_size=10)
 
 
 
