@@ -13,8 +13,8 @@ from skimage.measure import label, regionprops
 
 
 #If you dont have the expression wise numpys generate them
-#save_directory=r'D:\MIBI-TOFF\Data'
-#MibiLoader(root=r'D:\MIBI-TOFF\Data_For_Amos', expressiontypes=None, T_path=None,save_directory=r'D:\MIBI-TOFF\Data_Full')
+save_directory=r'D:\MIBI-TOFF\Data'
+MibiLoader(root=r'D:\MIBI-TOFF\Data_For_Amos', expressiontypes=None, T_path=None,save_directory=r'D:\MIBI-TOFF\Data_Full')
 
 
 '''
@@ -111,12 +111,12 @@ for file in filtered_files:
 
 '''
 #This is a test for conversion to a graph
-data_catch=np.load('D:\MIBI-TOFF\Data\FOV1_G4_segmentations.npz',allow_pickle=True)
-segmentation=data_catch['erroded_mask']
+data_catch=np.load("D:\MIBI-TOFF\Data_Full\PN1\FOV2_PN1_CD4.npz",allow_pickle=True)
+segmentation=data_catch['segmentation']
 remove_non_cells=data_catch['clustered_seg']
 
-segmentation=segmentation
-remove_non_cells=remove_non_cells
+segmentation=segmentation[0:64,0:64]
+remove_non_cells=remove_non_cells[0:64,0:64]
 
 print(np.shape(segmentation))
 #This is to test how we can easily remove types that are not useful or to reduce the space down to a single cell type
@@ -130,17 +130,21 @@ remove_non_cells[remove_non_cells>0]=1
 
 
 
+
+
 #The bellow line would have relabled the image but not needed due to the nature of our image
 #labeled_segments = label(segmentation)
 print(list(data_catch.keys()))
 print(data_catch['FOV_table'])
-FOV_table = pd.DataFrame(data_catch['FOV_table'])
+FOV_table =pd.DataFrame.from_records( data_catch['FOV_table'])
+print(FOV_table.head())
+
 
 centroids,regions=proxF.centroid_compute(segmentation=segmentation,region_mask=remove_non_cells)
 
 segmentation=segmentation*remove_non_cells
 
-#centroids2 = np.array([region.centroid for region in regionprops(segmentation)])
+
 # Define the maximum distance for nodes to be connected (100 pixels in this example)
 max_distance = 25
 # Create a graph
@@ -159,26 +163,33 @@ max_distance = 25
 # Create a mapping from node indices to regions
 node_to_region = {}
 
+G_test = nx.Graph()
+
+
+node_to_region_test = {}
+
 # Add nodes to the graph
 for i, region in enumerate(regionprops(segmentation)):
-    node_to_region[i] = region
-    G.add_node(i, cell_type='Type A', area=region.area, centroid=region.centroid, segment_label = segmentation[int(region.centroid[0]), int(region.centroid[1])])
+    node_to_region_test[i] = region
 
-# Create edges based on the distances while ensuring nodes exist
-for i in range(len(distances)):
-    for j in range(i + 1, len(distances)):
-        if distances[i, j] <= max_distance:
-            G.add_edge(i, j)
+    G_test.add_node(i, cell_type='Type A', area=region.area, centroid=region.centroid, segment_label = segmentation[int(region.centroid[0]), int(region.centroid[1])])
+
+
+row_indices, col_indices = np.where(distances >= max_distance)
+index_pairs = list(zip(row_indices, col_indices))
+G_test.add_edges_from(index_pairs)
 
 plt.figure()
-segshow = plt.imshow(segmentation, 'gray')
-plt.title('Segmentation')
-print(G)
-# Visualize the graph
-#plt.figure()
-#pos = nx.spring_layout(G)  # Layout for visualization
-#nx.draw(G, pos, with_labels=True, node_size=300, node_color='lightblue', font_size=10)
+pos = nx.spring_layout(G)  # Layout for visualization
+nx.draw(G, pos, with_labels=True, node_size=300, node_color='lightblue', font_size=10)
+#plt.show()
+#Verify that the distances are being computed correctly
+#DF = pd.DataFrame(distances)
+#DF.to_csv("distance.csv")
 
+#DF = pd.DataFrame(centroids)
+#DF.to_csv("centroids.csv")
+#print(centroids)
 
 
 

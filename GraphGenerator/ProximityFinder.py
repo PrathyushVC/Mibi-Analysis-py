@@ -56,3 +56,5 @@ def dist_comp(centroids, num_chunks=1):
     return distances
 
 
+
+

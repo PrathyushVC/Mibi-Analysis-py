@@ -78,7 +78,7 @@ def process_directory(root, dirname, expressiontypes, clusters, cluster_map,T, f
     segmentation_path = os.path.join(root,dirname,'TIFs', 'segmentation_labels.tiff')
     FOV_table = T[T['fov'] == dirname]
     # Replace with the FOV you want to look up
-    patient_number = fov_to_patient_map.get(dirname, 'Unknown')  # Use 'Unknown' or a default value if FOV is not found
+    patient_number = fov_to_patient_map.get(dirname, 'control')  # Use 'Unknown' or a default value if FOV is not found
     print(patient_number)
 
     save_patient_dir=os.path.join(save_directory, f'PN{patient_number}')
@@ -100,7 +100,7 @@ def process_directory(root, dirname, expressiontypes, clusters, cluster_map,T, f
         save_path = f"{dirname}_PN{patient_number}_{expression_type}.npz"
         save_path=os.path.join(save_patient_dir, save_path)
         print(save_path)
-        np.savez(save_path, imageData=image_data, FOV_table=FOV_table, clustered_seg=clustered_seg, segmentation=segmentation)
+        np.savez(save_path, imageData=image_data, FOV_table=FOV_table.to_records(index=False), clustered_seg=clustered_seg, segmentation=segmentation,)
      
 
 def segmentation_grouper(segmentation, T, clusters, cluster_map):
