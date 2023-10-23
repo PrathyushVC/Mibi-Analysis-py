@@ -23,7 +23,7 @@ import warnings
 import concurrent.futures 
 
 
-def MibiLoader(root=None, expressiontypes=None, T_path=None,save_directory = None,):
+def mibi_loader(root=None, expressiontypes=None, T_path=None,save_directory = None,):
     # Check if the inputs are not provided and provide default values It is done this way as several of the inputs are long paths and made the function def really hard to read
     if root is None:
         root = r'D:\MIBI-TOFF\Data_For_Amos'
