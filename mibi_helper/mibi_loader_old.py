@@ -1,4 +1,12 @@
-'''
+import os
+import numpy as np
+import pandas as pd
+from tifffile import TiffFile
+import json
+import warnings
+
+def MibiLoader_old(root=None, expressiontypes=None, grps=None, T_path=None,save_directory = None):
+    '''
 This script is a python implementation of the Mibi-loader function
 It currently assumes the data is organized into groups which each have subfolders for each patient 
 this is subject to change as we recieve new data
@@ -14,15 +22,7 @@ outputs:
     (we may need to change this so that the output is a 3d volume which would save space)
     
     '''
-
-import os
-import numpy as np
-import pandas as pd
-from tifffile import TiffFile
-import json
-import warnings
-
-def MibiLoader_old(root=None, expressiontypes=None, grps=None, T_path=None,save_directory = None):
+    
     # Check if the inputs are not provided and provide default values It is done this way as several of the inputs are long paths and made the function def really hard to read
     if root is None:
         root = r'C:\Users\chirr\OneDrive - Case Western Reserve University\Research\MIBI-TOFF\Data\weizmann\lymph_node_metastasis\Original_Data'

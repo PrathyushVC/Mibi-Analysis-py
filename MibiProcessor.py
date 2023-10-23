@@ -2,9 +2,9 @@ import os,cv2
 import numpy as np
 import pandas as pd
 from tifffile import TiffFile
-from MibiHelper import MibiLoader
-from MibiHelper import MibiEroder
-from GraphGenerator import ProximityFinder as proxF
+from mibi_helper import mibi_loader
+from mibi_helper import mibi_eroder
+from graph_maker import graph_maker
 import matplotlib.pyplot as plt
 import networkx as nx
 from skimage.measure import label, regionprops
@@ -13,39 +13,16 @@ from skimage.measure import label, regionprops
 
 
 #If you dont have the expression wise numpys generate them
-save_directory=r'D:\MIBI-TOFF\Data'
-MibiLoader(root=r'D:\MIBI-TOFF\Data_For_Amos', expressiontypes=None, T_path=None,save_directory=r'D:\MIBI-TOFF\Data_Full')
+#save_directory=r'D:\MIBI-TOFF\Data'
+#MibiLoader(root=r'D:\MIBI-TOFF\Data_For_Amos', expressiontypes=None, T_path=None,save_directory=r'D:\MIBI-TOFF\Data_Full')
 
 
-'''
-#data_catch=np.load(r'D:\MIBI-TOFF\Data\FOV1_G3_CD4.npz')
-#print(data_catch.files)
-plt.figure()dir\
-im = plt.imshow(data_catch['imageData'], 'gray')
-plt.title('ImageData')
 
-
-plt.figure()
-segshow = plt.imshow(data_catch['segmentation'], 'gray')
-plt.title('Segmentation')
-
-plt.figure()
-clusterdseg=plt.imshow(data_catch['clustered_seg'], 'gray')
-plt.title('Clustered_Seg')
-plt.show()
-
-'''
 '''
 directory = save_directory  
 
 # List all files in the directory
 file_list = os.listdir(directory)
-
-# Filter files that end with "_CD4.npz"
-#This is for testing in the future I think these individual files wont have the these redundent info in them and instead a single seg file with be made per patient
-'''
-
-'''
 filtered_files = [file for file in file_list if file.endswith("_CD4.npz")]
 
 
@@ -76,8 +53,6 @@ for file in filtered_files:
 
 '''
 
-
-# Errosion Loops
 
 '''
 directory = save_directory  
@@ -120,69 +95,31 @@ remove_non_cells=remove_non_cells[0:64,0:64]
 
 print(np.shape(segmentation))
 #This is to test how we can easily remove types that are not useful or to reduce the space down to a single cell type
-values_to_set_to_zero=[1,7,8,9]
+values_to_set_to_zero=[2,3,4,12]#These values are depended on the the cluster_map json always remove unidentified
 # Create a boolean mask for the values to be set to zero
 mask = np.isin(remove_non_cells, values_to_set_to_zero)
-
 # Set the values to zero using the mask
 remove_non_cells[mask] = 0
 remove_non_cells[remove_non_cells>0]=1
-
-
-
-
+segmentation=segmentation*remove_non_cells
 
 #The bellow line would have relabled the image but not needed due to the nature of our image
 #labeled_segments = label(segmentation)
 print(list(data_catch.keys()))
-print(data_catch['FOV_table'])
 FOV_table =pd.DataFrame.from_records( data_catch['FOV_table'])
-print(FOV_table.head())
-
-
-centroids,regions=proxF.centroid_compute(segmentation=segmentation,region_mask=remove_non_cells)
-
-segmentation=segmentation*remove_non_cells
-
-
 # Define the maximum distance for nodes to be connected (100 pixels in this example)
 max_distance = 25
-# Create a graph
-G = nx.Graph()
-# Extract centroids into a NumPy array
-distances=proxF.dist_comp(centroids, num_chunks=1)
-'''
-
-
-# Compute pairwise Euclidean distances between centroids
-distances = np.linalg.norm(centroids[:, None] - centroids, axis=2)
-'''
-# Set the maximum distance threshold
-max_distance = 25
-
-# Create a mapping from node indices to regions
-node_to_region = {}
-
-G_test = nx.Graph()
-
-
-node_to_region_test = {}
-
+G_test=graph_maker.seg_to_graph(segmentation=segmentation,max_distance=max_distance,FOV_table=FOV_table,num_chunks=1)
 # Add nodes to the graph
-for i, region in enumerate(regionprops(segmentation)):
-    node_to_region_test[i] = region
 
-    G_test.add_node(i, cell_type='Type A', area=region.area, centroid=region.centroid, segment_label = segmentation[int(region.centroid[0]), int(region.centroid[1])])
-
-
-row_indices, col_indices = np.where(distances >= max_distance)
-index_pairs = list(zip(row_indices, col_indices))
-G_test.add_edges_from(index_pairs)
-
+print(G_test)
+'''
+Generate test figure
 plt.figure()
-pos = nx.spring_layout(G)  # Layout for visualization
-nx.draw(G, pos, with_labels=True, node_size=300, node_color='lightblue', font_size=10)
-#plt.show()
+pos = nx.spring_layout(G_test)  # Layout for visualization
+nx.draw(G_test, pos, with_labels=True, node_size=300, node_color='lightblue', font_size=10)
+plt.show()
+'''
 #Verify that the distances are being computed correctly
 #DF = pd.DataFrame(distances)
 #DF.to_csv("distance.csv")
