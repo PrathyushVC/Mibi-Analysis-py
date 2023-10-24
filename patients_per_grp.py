@@ -3,7 +3,7 @@ import os,cv2
 import numpy as np
 import pandas as pd
 
-def count_patients_and_FOV(df=None):
+def count_patients_and_FOV(df=None,name_drop=None):
     '''
     Counts the number of patients and FOV Names grouped by 'Group' in a DataFrame.
 
@@ -15,10 +15,19 @@ def count_patients_and_FOV(df=None):
 
     This function groups patients and FOV Names by the 'Group' column in the input DataFrame and calculates the number of patients and the number of unique FOV Names for each group. It then merges the results into a single DataFrame for further analysis or reporting.
     '''
+    #This assumes that the blanks in the table are not needed 
+    if name_drop:
+        mask = df['Name'].str.contains(name_drop, case=False)#This is for testing purposes
+        df = df[~mask]
+    df.dropna(subset=['FOV_Name'], inplace=True)
+
+
     #Group patients by the Groups for later training and testing
     results = df.groupby('Group')['patient number'].apply(set).reset_index()
     results['Number of Patients'] = results['patient number'].apply(len)
     #Group FOVs by the Groups for later training and testing
+
+    #write me code that drops the nans from the df based on the column ['FOV_Name]
 
     results_fov=df.groupby('Group')['FOV_Name'].apply(set).reset_index()
     results_fov['Number of FOV Name']=results_fov['FOV_Name'].apply(len)
@@ -49,8 +58,9 @@ def extract_set(merged_results=None,group='control'):
 path_to_csv=r"D:\MIBI-TOFF\Data_For_Amos\Data_Summary.csv"
 df = pd.read_csv(path_to_csv)
 print(df.columns)
+print(df.head)
 
-merged_results=count_patients_and_FOV(df=df)
+merged_results=count_patients_and_FOV(df=df,name_drop='prescan')
 patient_list_G1=extract_set(merged_results=merged_results,group='G1')
 patient_list_G2=extract_set(merged_results=merged_results,group='G2')
 patient_list_G3=extract_set(merged_results=merged_results,group='G3')

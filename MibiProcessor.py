@@ -86,12 +86,17 @@ for file in filtered_files:
 
 '''
 #This is a test for conversion to a graph
+
+directory = save_directory  
+file_list = os.listdir(directory)
+
+filtered_files = [file for file in file_list if file.endswith("_segmentations.npz")]
 data_catch=np.load("D:\MIBI-TOFF\Data_Full\PN1\FOV2_PN1_CD4.npz",allow_pickle=True)
 segmentation=data_catch['segmentation']
 remove_non_cells=data_catch['clustered_seg']
 
-segmentation=segmentation[0:64,0:64]
-remove_non_cells=remove_non_cells[0:64,0:64]
+segmentation=segmentation
+remove_non_cells=remove_non_cells
 
 print(np.shape(segmentation))
 #This is to test how we can easily remove types that are not useful or to reduce the space down to a single cell type
