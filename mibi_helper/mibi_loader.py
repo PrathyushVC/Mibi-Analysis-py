@@ -111,3 +111,13 @@ def segmentation_grouper(segmentation, T, clusters, cluster_map):
         for i, label in enumerate(labels):
             clustered_seg[segmentation == label] = cluster_map[cluster]
     return clustered_seg
+
+def find_files_ending(directory,subscript_search='.npz'):
+    npz_files = []
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith(subscript_search):
+                file_path = os.path.join(root, file)
+                # Load the .npz file
+                npz_files.append((file_path))
+    return npz_files

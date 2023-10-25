@@ -46,11 +46,26 @@ def seg_to_graph(segmentation=None,max_distance=None,FOV_table=None,num_chunks=1
         else:
             cell_type=1
         G_test.add_node(i,cell_type=cell_type,CD4=Fmatching_row['CD4'].values[0],CD45=Fmatching_row['CD45'].values[0], CD8=Fmatching_row['CD8'].values[0],area=region.area, centroid=region.centroid)
-
+    
+    added_edges = set()
 #add edges to graph
-    row_indices, col_indices = np.where(distances >= max_distance)
+    row_indices, col_indices = np.where((distances <= max_distance) & (distances>0)) # Find
     index_pairs = list(zip(row_indices, col_indices))
-    G_test.add_edges_from(index_pairs)
+
+    #Code to avoid duplicates until I find a way to compute the distance graph so that it only fills the top triangle.
+    for source, target in index_pairs:
+        if source == target:
+            continue  # Skip self-loops if present in your data
+
+        weight = distances[source, target]
+
+        # Check if the edge (source, target) or (target, source) already exists
+        if (source, target) in added_edges or (target, source) in added_edges:
+            continue  # Skip adding duplicate edges
+        else:
+            G_test.add_edge(source, target, weight=weight)
+            added_edges.add((source, target))
+
     return G_test
 
 def centroid_compute(segmentation=None):
@@ -95,6 +110,8 @@ def dist_comp(centroids, num_chunks=1):
     # Split centroids into chunks for parallel processing
     chunk_ids = [pairwise_distances.remote(chunk, centroids,num_chunks) for chunk in range(num_chunks)]
     distances = np.concatenate(ray.get(chunk_ids), axis=0)
+    distances = np.triu(distances, k=1)  # k=1 to exclude the diagonal
+
 
     return distances
 
