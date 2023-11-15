@@ -45,6 +45,7 @@ def seg_to_graph(segmentation=None,max_distance=None,FOV_table=None,num_chunks=1
             cell_type=0
         else:
             cell_type=1
+            #Add all the needed protein info
         G_test.add_node(i,cell_type=cell_type,CD4=Fmatching_row['CD4'].values[0],CD45=Fmatching_row['CD45'].values[0], CD8=Fmatching_row['CD8'].values[0],area=region.area, centroid=region.centroid)
     
     added_edges = set()
