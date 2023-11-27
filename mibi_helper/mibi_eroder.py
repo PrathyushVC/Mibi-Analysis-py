@@ -36,12 +36,12 @@ def mibi_eroder(segmentation):
     # Create a binary mask for the current region
         binary_mask = (segmentation == region_value).astype(np.uint8)
     
-    # Perform a 1-pixel erosion operation using OpenCV
+    # Perform a 1-pixel erosion 
         kernel = np.array([[1, 1, 1],
                           [1, 1, 1],
                           [1, 1, 1]], dtype=np.uint8)
         eroded_mask = cv2.erode(binary_mask, kernel, iterations=1)
     
-        # Assign the original region value to the eroded pixels
+        # Assign the original region value to 
         merged_mask[eroded_mask == 1] = region_value
     return merged_mask
