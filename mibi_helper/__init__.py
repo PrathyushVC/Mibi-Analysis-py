@@ -4,6 +4,6 @@ MibiLoader Package
 This package provides functionality for loading and processing MIBI data.
 """
 from .mibi_loader import mibi_loader, segmentation_grouper , find_files_ending # Adjust the import as needed
-from .mibi_eroder import mibi_eroder
+from .mibi_eroder import mibi_eroder, mibi_eroder_parallel
 
 __version__ = "1.0.0"

@@ -2,7 +2,7 @@ import os,cv2
 import numpy as np
 import pandas as pd
 from tifffile import TiffFile
-from mibi_helper import mibi_loader, mibi_eroder, find_files_ending
+from mibi_helper import mibi_loader, mibi_eroder_parallel, mibi_eroder, find_files_ending
 from graph_maker import graph_maker
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -17,8 +17,8 @@ save_directory=r'D:\MIBI-TOFF\Data_Full'
 
 
 
-'''
-directory = save_directory  
+
+directory = r'D:\MIBI-TOFF\Data_Full\PN1'
 
 # List all files in the directory
 file_list = os.listdir(directory)
@@ -33,7 +33,7 @@ for file in filtered_files:
     
     segmentation=data_catch['segmentation']
 
-    erroded_mask=MibiEroder(segmentation=segmentation)
+    erroded_mask=mibi_eroder_parallel(segmentation=segmentation)
     save_directory=r'D:\MIBI-TOFF\Data'
 
     #This assumes the filed are named FOVX_GX and will get mad if its anything else
@@ -50,7 +50,6 @@ for file in filtered_files:
              clustered_seg=data_catch['clustered_seg'],
              segmentation=segmentation)
 
-'''
 
 
 '''
