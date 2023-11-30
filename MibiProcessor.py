@@ -13,7 +13,7 @@ from skimage.measure import label, regionprops
 
 #If you dont have the expression wise numpys generate them
 save_directory=r'D:\MIBI-TOFF\Data_Full'
-#mibi_loader(root=r'D:\MIBI-TOFF\Data_For_Amos', expressiontypes=None, T_path=None,save_directory=r'D:\MIBI-TOFF\Data_Full')
+mibi_loader(root=r'D:\MIBI-TOFF\Data_For_Amos', expressiontypes=None, T_path=None,save_directory=r'D:\MIBI-TOFF\Data_Full')
 
 
 

@@ -12,7 +12,7 @@ outputs:
     will generate a npz file with the expression image, the segmentation, and the clustered segmentation.
     (we may need to change this so that the output is a 3d volume which would save space)
     
-    '''
+'''
 
 import os
 import numpy as np
@@ -66,13 +66,35 @@ def mibi_loader(root=None, expressiontypes=None, T_path=None,save_directory = No
 
 
     dirlist = os.listdir(root)
-    #This part of the loop or the expression loop could be parrallized
-    num_threads = min(len(dirlist), os.cpu_count()-10)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
-        for dirname in dirlist:
-            if os.path.isdir(os.path.join(root,dirname)):
-                executor.submit(process_directory, root, dirname, expressiontypes, clusters, cluster_map, T,fov_to_patient_map, save_directory)
+   # filtered_FOV = [file for file in os.listdir(root) if file.startswith('FOV')]
+    #full_FOV=list(fov_to_patient_map.keys())
 
+    #diff=full_FOV-filtered_FOV
+
+    #This part of the loop or the expression loop could be parrallized
+    percentage_of_cores = 0.8  # Set your desired percentage (e.g., 80%)
+    max_workers = int(os.cpu_count() * percentage_of_cores)
+    missed_directories = []
+    futures = []
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        
+        for dirname in dirlist:
+            if os.path.isdir(os.path.join(root, dirname)):
+                future = executor.submit(process_directory, root, dirname, expressiontypes, clusters, cluster_map, T, fov_to_patient_map, save_directory)
+                futures.append(future)
+            else:
+                futures.append(None)
+                missed_directories.append(dirname)
+        
+        for future in concurrent.futures.as_completed(futures):
+            if future is not None:
+                try:
+                    pass            
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+                    
+    for missed_directory in missed_directories:
+        print(f"Error: Directory {missed_directory} does not exist.") 
             
 def process_directory(root, dirname, expressiontypes, clusters, cluster_map,T, fov_to_patient_map,save_directory):
     segmentation_path = os.path.join(root,dirname,'TIFs', 'segmentation_labels.tiff')
