@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from skimage.measure import label, regionprops
 # Initialize Ray and connect to the cluster
-
-
+#r'C:\Users\chirr\OneDrive - Case Western Reserve University\Research\MIBI-TOFF\Data\weizmann\lymph_node_metastasis\Original_Data'
+#T_old=r'C:\Users\chirr\Downloads\weizmann\lymph_node_metastasis\Original_Data\Cell_Table_Marker_150622.csv
 
 #If you dont have the expression wise numpys generate them
 save_directory=r'D:\MIBI-TOFF\Data_Full'

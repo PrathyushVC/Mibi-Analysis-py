@@ -25,7 +25,7 @@ outputs:
     
     # Check if the inputs are not provided and provide default values It is done this way as several of the inputs are long paths and made the function def really hard to read
     if root is None:
-        root = r'C:\Users\chirr\OneDrive - Case Western Reserve University\Research\MIBI-TOFF\Data\weizmann\lymph_node_metastasis\Original_Data'
+        raise ValueError("Root cannot be None. Please provide a valid input.")
     
     if expressiontypes is None:
         expressiontypes = ['Alexa Fluor 488', 'Bax', 'CD4', 'CD8', 'CD20', 'CD14', 'CD68', 'CD206', 'CD11c', 'CD21', 'CD3', 'DC-SIGN', 'CD56', 'Granzyme B', 'CD163', 'Foxp3', 'S100A9-Calprotectin', 'CD45RA', 'CD45RO', 'CCR7', 'CD31', 'CD45', 'CD69', 'COL1A1', 'HLA-DR-DP-DQ', 'HLA-class-1-A-B-C', 'IDO-1', 'Ki67', 'LAG-3', 'MECA-79', 'MelanA', 'PD-1', 'SMA', 'SOX10', 'TCF1TCF7', 'TIM-3', 'Tox-Tox2', 'anti-Biotin', 'dsDNA']
@@ -35,7 +35,7 @@ outputs:
         grps = ['G3', 'G4']
     
     if T_path is None:
-        T_path=r'C:\Users\chirr\Downloads\weizmann\lymph_node_metastasis\Original_Data\Cell_Table_Marker_150622.csv'
+        raise ValueError("Path to table cannot be None. Please provide a valid input.")
     
     if save_directory is None:
         save_directory = os.getcwd
