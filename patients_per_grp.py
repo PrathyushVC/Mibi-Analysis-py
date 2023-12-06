@@ -22,12 +22,9 @@ def count_patients_and_FOV(df=None,name_drop=None):
     df.dropna(subset=['FOV_Name'], inplace=True)
 
 
-    #Group patients by the Groups for later training and testing
     results = df.groupby('Group')['patient number'].apply(set).reset_index()
     results['Number of Patients'] = results['patient number'].apply(len)
-    #Group FOVs by the Groups for later training and testing
 
-    #write me code that drops the nans from the df based on the column ['FOV_Name]
 
     results_fov=df.groupby('Group')['FOV_Name'].apply(set).reset_index()
     results_fov['Number of FOV Name']=results_fov['FOV_Name'].apply(len)
