@@ -34,7 +34,7 @@ def mibi_loader(root=None, expressiontypes=None, T_path=None,save_directory = No
             'CD45RA', 'CD45RO', 'CCR7', 'CD31', 'CD45', 'CD69', 'COL1A1', 'HLA-DR-DP-DQ', 'HLA-class-1-A-B-C', \
             'IDO-1', 'Ki67', 'LAG-3', 'MECA-79', 'MelanA', 'PD-1', 'SMA', 'SOX10', 'TCF1TCF7', 'TIM-3', \
             'Tox-Tox2', 'anti-Biotin', 'dsDNA' ]
-        expressiontypes = [expressiontypes[i] for i in [2, 21, 24, 25, 38]]
+        expressiontypes = [expressiontypes[i] for i in [2,3,4,21,24,25,38]]
     
     if T_path is None:
         T_path=os.path.join(root,'cleaned_expression_with_both_classification_prob_spatial_27_09_23.csv')
@@ -45,7 +45,7 @@ def mibi_loader(root=None, expressiontypes=None, T_path=None,save_directory = No
     print("saving Files to :",save_directory)
 
     T=pd.read_csv(T_path)
-    print(T.head(5))
+    #print(T.head(5))
     if os.path.isfile('clusters.npy') and os.path.isfile('cluster_map.json'):
         clusters=np.load('clusters.npy', allow_pickle=True)
         with open("cluster_map.json", "r") as json_file:
