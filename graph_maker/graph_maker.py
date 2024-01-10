@@ -56,7 +56,7 @@ def seg_to_graph(segmentation=None,max_distance=None,FOV_table=None,num_chunks=1
     #Code to avoid duplicates until I find a way to compute the distance graph so that it only fills the top triangle.
     for source, target in index_pairs:
         if source == target:
-            continue  # Skip self-loops if present in your data
+            continue  
 
         weight = distances[source, target]
 
