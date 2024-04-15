@@ -56,6 +56,7 @@ class ImagePatchDataset(Dataset):
         return patches
 
     def process_patches_to_graph(self, patches):
+        
 
         
         pass
@@ -65,7 +66,7 @@ image_paths = ["path/to/image1.jpg", "path/to/image2.jpg"]
 patch_size = 128
 transform = transforms.Compose([transforms.ToTensor()])
 randomize = 0.2
-overlap = True
+overlap = False
 
 dataset = ImagePatchDataset(image_paths, patch_size, transform, randomize, overlap)
 data = dataset[0]  # Accessing the first graph data in the dataset

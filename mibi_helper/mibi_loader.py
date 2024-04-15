@@ -23,7 +23,7 @@ import warnings
 import concurrent.futures 
 
 
-def mibi_loader(root=None, expressiontypes=None, T_path=None,save_directory = None,):
+def mibi_loader(root=None, expressiontypes=None, T_path=None,save_directory = None,updated_cluster_map=None):
     # Check if the inputs are not provided and provide default values It is done this way as several of the inputs are long paths and made the function def really hard to read
     if root is None:
         raise ValueError("root cannot be None. Please provide a valid input.")
@@ -58,7 +58,7 @@ def mibi_loader(root=None, expressiontypes=None, T_path=None,save_directory = No
 
         with open("cluster_map.json", "w") as json_file:
             json.dump(cluster_map, json_file)
-        np.save('clusters.npy',clusters)
+
     
     #Create a dictionary of all the FOV and patient combinations. This can be returned if needed 
     #As we will need to do this anyway  seems easier to do at the start
@@ -95,6 +95,7 @@ def mibi_loader(root=None, expressiontypes=None, T_path=None,save_directory = No
                     
     for missed_directory in missed_directories:
         print(f"Error: Directory {missed_directory} does not exist.") 
+
             
 def process_directory(root, dirname, expressiontypes, clusters, cluster_map,T, fov_to_patient_map,save_directory):
     segmentation_path = os.path.join(root,dirname,'TIFs', 'segmentation_labels.tiff')
