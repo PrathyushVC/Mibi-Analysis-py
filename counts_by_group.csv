@@ -1,0 +1,62 @@
+Group,String,Count,Percentage
+G1,CD4_T_cell,146394,33.49
+G1,B_Cells,88581,20.26
+G1,Memory_CD4_T_Cells,55317,12.65
+G1,CD8_T_cell,48018,10.98
+G1,Germinal_Center_B_Cell,31163,7.13
+G1,MAC,15950,3.65
+G1,Stroma,12479,2.85
+G1,DCs,12311,2.82
+G1,Hevs,11615,2.66
+G1,blood vessels,6122,1.4
+G1,CD4_Treg,5191,1.19
+G1,Neutrophil,2343,0.54
+G1,NK cell,1673,0.38
+G1,Immune,3,0.0
+G2,CD4_T_cell,133310,34.83
+G2,B_Cells,86758,22.66
+G2,CD8_T_cell,36551,9.55
+G2,Memory_CD4_T_Cells,35135,9.18
+G2,MAC,29579,7.73
+G2,Germinal_Center_B_Cell,15220,3.98
+G2,Stroma,12196,3.19
+G2,Hevs,11313,2.96
+G2,DCs,8431,2.2
+G2,blood vessels,8271,2.16
+G2,Neutrophil,2688,0.7
+G2,CD4_Treg,2023,0.53
+G2,NK cell,1294,0.34
+G2,tumor,13,0.0
+G2,Immune,4,0.0
+G3,CD4_T_cell,106653,29.13
+G3,B_Cells,82103,22.43
+G3,CD8_T_cell,38591,10.54
+G3,Memory_CD4_T_Cells,35366,9.66
+G3,Germinal_Center_B_Cell,24471,6.68
+G3,tumor,21744,5.94
+G3,MAC,14442,3.95
+G3,Stroma,9511,2.6
+G3,DCs,9505,2.6
+G3,Hevs,8449,2.31
+G3,CD4_Treg,5369,1.47
+G3,blood vessels,5237,1.43
+G3,Neutrophil,2833,0.77
+G3,NK cell,1214,0.33
+G3,CD3,586,0.16
+G3,Immune,3,0.0
+G4,CD4_T_cell,117705,29.06
+G4,B_Cells,98521,24.33
+G4,Memory_CD4_T_Cells,37651,9.3
+G4,CD8_T_cell,33473,8.27
+G4,Germinal_Center_B_Cell,23738,5.86
+G4,MAC,22002,5.43
+G4,tumor,18294,4.52
+G4,Stroma,15834,3.91
+G4,DCs,11573,2.86
+G4,Hevs,8562,2.11
+G4,blood vessels,8450,2.09
+G4,Neutrophil,4444,1.1
+G4,CD4_Treg,3216,0.79
+G4,NK cell,1438,0.36
+G4,CD3,80,0.02
+G4,Immune,8,0.0
