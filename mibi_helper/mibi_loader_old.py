@@ -22,7 +22,11 @@ outputs:
     (we may need to change this so that the output is a 3d volume which would save space)
     
     '''
-    
+    warnings.warn(
+    "This module is deprecated and designed only for a limited trial dataset. Please use mibi_loader instead.",
+    DeprecationWarning,
+    stacklevel=2
+    )
     # Check if the inputs are not provided and provide default values It is done this way as several of the inputs are long paths and made the function def really hard to read
     if root is None:
         raise ValueError("Root cannot be None. Please provide a valid input.")

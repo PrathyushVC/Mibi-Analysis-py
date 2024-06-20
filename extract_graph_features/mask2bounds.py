@@ -17,7 +17,7 @@ def mask2bounds(img, is_object_black=False):
     mask = cv2.fillPoly(mask, [mask], 1)
 
     # Find contours and centroids using OpenCV
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
     bounds = []
     for contour in contours:
