@@ -2,3 +2,7 @@
 *.png
 *.bmp
 test_result.csv
+env/
+.env/
+.ipynb_checkpoints/
+__pycache__/
