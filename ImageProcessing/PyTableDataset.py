@@ -18,8 +18,6 @@ class PyTableDataset(Dataset):
         mask = self.masks[idx]
         numpixels = self.numpixels[idx]
 
-        print(image.shape)
-
         image = torch.tensor(image, dtype=torch.float32)
         mask = torch.tensor(mask, dtype=torch.float32)
         numpixels = torch.tensor(numpixels, dtype=torch.int32)
