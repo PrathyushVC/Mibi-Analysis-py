@@ -8,7 +8,7 @@ from albumentations import *
 import tables
 import scipy.ndimage 
 
-class Mibi_img_Dataset(Dataset):
+class MibiDataset(Dataset):
     def __init__(self,fname,transform=None,edge_weight=False):
         self.fname = fname
         self.transform = transform
@@ -44,5 +44,3 @@ class Mibi_img_Dataset(Dataset):
     
     def __len__(self):
         return self.nitems
-
-  

@@ -1,8 +1,9 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.ndimage.morphology import binary_fill_holes
 
-def mask2bounds(img, is_object_black=False):
+def mask2bounds(img, thresh=0.5,is_object_black=False):
     # Threshold to get rid of bad image compression in jpg
     pres = np.max(img)
     img[img > pres / 2] = pres
@@ -14,7 +15,7 @@ def mask2bounds(img, is_object_black=False):
         mask = img.astype(np.uint8)  # object is white
 
     # Fill holes in the mask
-    mask = cv2.fillPoly(mask, [mask], 1)
+    mask = binary_fill_holes(mask)
 
     # Find contours and centroids using OpenCV
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)

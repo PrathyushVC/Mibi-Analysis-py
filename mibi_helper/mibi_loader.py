@@ -37,7 +37,7 @@ def mibi_loader(root=None, expressiontypes=None, T_path=None,save_directory = No
         expressiontypes = [expressiontypes[i] for i in [2,3,4,21,24,25,38]]
     
     if T_path is None:
-        T_path=os.path.join(root,'cleaned_expression_with_both_classification_prob_spatial_27_09_23.csv')
+        T_path=os.path.join(root,'cleaned_expression_with_both_classification_prob_spatial_30_08_24.csv')
         print(T_path)
     
     if save_directory is None:

@@ -13,7 +13,19 @@ import PIL
 import matplotlib.pyplot as plt
 
 
+
 def extract_patches(arr,patch_shape=32,stride=32):
+    """
+    Extracts patches from an array.
+
+    Inputs:
+    - arr (numpy array): The input array from which patches are to be extracted.
+    - patch_shape (int or tuple of ints, optional): The shape of the patches to be extracted. If an int, all dimensions of the patches are the same. If a tuple, the shape of the patches is given by the tuple.
+    - stride (int or tuple of ints, optional): The stride of the sliding window used to extract patches. If an int, all dimensions of the stride are the same. If a tuple, the stride is given by the tuple.
+
+    Outputs:
+    - patches (numpy array): The extracted patches.
+    """
     if isinstance(patch_shape,numbers.Number):
         patch_shape=(patch_shape,) * arr.ndim
     if isinstance(stride,numbers.Number):
@@ -33,7 +45,26 @@ def extract_patches(arr,patch_shape=32,stride=32):
 
 
 
-def make_hdf5(dataname,patch_size=64,stride_size=64,mirror_pad_size=16,test_set_size=0.1,resize=1,classes=np.arange(1),data_full_path=None,tables_base_path=None):
+def make_hdf5(dataname,patch_size=64,stride_size=64,mirror_pad_size=16,test_set_size=0.1,resize=1,classes=np.arange(1),
+data_full_path=None,tables_base_path=None,class_to_keep=None):
+    """
+    Creates an HDF5 file for storing image patches and their corresponding masks for training and validation sets.
+
+    Parameters:
+    - dataname (str): The base name of the HDF5 file to be created.
+    - patch_size (int, optional): The size of the patches to be extracted from images. Defaults to 64.
+    - stride_size (int, optional): The stride size for patch extraction. Defaults to 64.
+    - mirror_pad_size (int, optional): The size of the mirror padding to be applied to images. Defaults to 16.
+    - test_set_size (float, optional): The proportion of the dataset to be used for the test set. Defaults to 0.1.
+    - resize (int, optional): The resize factor for images. Defaults to 1.
+    - classes (numpy array, optional): The classes to be considered. Defaults to np.arange(1).
+    - data_full_path (str, optional): The full path to the data directory. Defaults to None.
+    - tables_base_path (str, optional): The base path for the HDF5 files. Defaults to None.
+
+    This function first checks if the required paths are provided, then it logs the configuration parameters. 
+    It then processes the files in the data directory, splitting them into training and validation sets based on the test_set_size.
+     For each phase (training and validation), it creates an HDF5 file and initializes arrays for storing filenames, images, and masks. The function then iterates over each file in the phase, processing and storing the patches and their corresponding masks.
+    """
     if data_full_path is None:
         raise ValueError("data_full_path must be provided")
     if tables_base_path is None:
@@ -105,6 +136,8 @@ def make_hdf5(dataname,patch_size=64,stride_size=64,mirror_pad_size=16,test_set_
                         interp_method=PIL.Image.BICUBIC
                     else:    
                         io=Img_data['clustered_seg']  
+                        if class_to_keep is not None:
+                            io=convert_to_three_groups(mask=io, class_to_keep=class_to_keep)
                         io = np.repeat(io[:, :, np.newaxis], 3, axis=2)#This is only to handle the fact that the template code assumes the image has been read in by cv2.read resulting in 3d.
                         #expanding and squeezing achieves the same dimensions without needing custom cases
                         interp_method=PIL.Image.NEAREST
@@ -136,10 +169,14 @@ def make_hdf5(dataname,patch_size=64,stride_size=64,mirror_pad_size=16,test_set_
             npixels[:]=totals
             hdf5_file.close()  
 
-def binarize_segmentation(mask,class_to_keep=[]):
-    if class_to_keep is None:
-        raise Exception('class to keep must have at least one real integer value')
+def convert_to_three_groups(mask, class_to_keep):
+    new_mask = np.zeros_like(mask, dtype=np.uint8)
+    for val in class_to_keep:
+        new_mask[mask == val] = 1
+    new_mask[(mask != 0) & ~(np.isin(mask, class_to_keep))] = 2
     
+
+    return new_mask
 
 
 def show_image(image_data,title='Image'):
@@ -176,7 +213,7 @@ def test_samp_imgs(file_path,print_ximages=1000):
             for i,image in enumerate(images_generator):
                 if i%print_ximages==0:
                     first_image = next(images_generator)
-                    show_image(first_image, title='f{i}')
+                    show_image(first_image, title='Sample Image')
         except StopIteration:
             logging.info("no more images")
         mask_gen = lazy_load_mask(hdf)
@@ -184,25 +221,25 @@ def test_samp_imgs(file_path,print_ximages=1000):
             for i,mask in enumerate(mask_gen):
                 if i%print_ximages==0:
                     first_image = next(mask_gen)
-                    show_image(first_image, title='f{i}')
+                    show_image(first_image, title='Sample Mask')
         except StopIteration:
             logging.info("no more images")
 
-
-        
- 
 if __name__ == "__main__":
+    logging.warning("Are you sure you intended to run this directly?")
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     current_dir = os.path.dirname(__file__)
-    print_ximages=1000
+    print_ximages=10000
     #os.path.join(current_dir, r'..\..\..\Data_Full\**\*_CD4.npz')
     #os.path.join(current_dir, r'..\..\..\Scratch')
     #6,7,13 we are actually only interested in these 3 classes and everything else can be labeled background for this test
     #Setting it up like this makes it easy to sanitize later
-    make_hdf5(dataname='Mibi_trial',data_full_path=os.path.join(current_dir, r'..\..\..\Data_Full\**\*_CD4.npz'),tables_base_path=os.path.join(current_dir, r'..\..\..\Scratch'))              
-    #file_path='D:\MIBI-TOFF\Scratch\Mibi_trial_train.pytable'
-    #print_hdf5_file_data(file_path)
-    #test_samp_imgs(file_path,print_ximages=1000)
+    #Note this 
+    classes=np.arange(3)
+    #make_hdf5(dataname='Mibi_trial',data_full_path=os.path.join(current_dir, r'..\..\..\Data_Full\**\*_CD4.npz'),tables_base_path=os.path.join(current_dir, r'..\..\..\Scratch'),classes=classes,class_to_keep=[6,7,13])              
+    file_path='D:\MIBI-TOFF\Scratch\Mibi_trial_train.pytable'
+    print_hdf5_file_data(file_path)
+    test_samp_imgs(file_path,print_ximages=1000)
 
     
 

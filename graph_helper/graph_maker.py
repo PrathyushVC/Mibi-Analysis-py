@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import networkx as nx
-from skimage.measure import label, regionprops
+
 import ray
 
 def seg_to_graph(segmentation=None,max_distance=None,FOV_table=None,num_chunks=1):

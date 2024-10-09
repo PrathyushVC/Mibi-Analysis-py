@@ -4,10 +4,8 @@ import torch.nn.functional as F
 
 
 class UNet(nn.Module):
-    def __init__(self, in_channels=1, n_classes=2, depth=5, wf=6, padding=False,
-                 batch_norm=False, up_mode='upconv'):
         """
-        Implementation of
+        REimplementation of
         U-Net: Convolutional Networks for Biomedical Image Segmentation
         (Ronneberger et al., 2015)
         https://arxiv.org/abs/1505.04597
@@ -30,6 +28,9 @@ class UNet(nn.Module):
                            learned upsampling.
                            'upsample' will use bilinear upsampling.
         """
+    def __init__(self, in_channels=1, n_classes=2, depth=5, wf=6, padding=False,
+                 batch_norm=False, up_mode='upconv'):
+
         super(UNet, self).__init__()
         assert up_mode in ('upconv', 'upsample')
         self.padding = padding
