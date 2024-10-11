@@ -32,7 +32,7 @@ def getCD4TCount(filePath):
        
         for p in patient:
             table.append([p,patient[p][0],patient[p][1],", ".join(patient[p][2])])
-        table=sorted(table);
+        table=sorted(table)
         with open('CD4_T_Count_With_FOV.csv', 'w') as fp:
             header=["Patient", "Group", "Tumor Cell Count", "FOVs"]
             writer = csv.writer(fp, delimiter=',')
@@ -41,7 +41,7 @@ def getCD4TCount(filePath):
                 writer.writerow(row)
         
 
-        return;
+        return
         
 
 
