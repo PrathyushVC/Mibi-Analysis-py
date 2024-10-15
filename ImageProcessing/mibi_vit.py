@@ -15,9 +15,7 @@ class ViTBinaryClassifier(nn.Module):
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         
         self.transformer = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model=embed_dim, nhead=num_heads, dim_feedforward=mlp_dim, activation='gelu'), 
-            num_layers=depth
-        )
+            nn.TransformerEncoderLayer(d_model=embed_dim, nhead=num_heads, dim_feedforward=mlp_dim, activation='gelu'), num_layers=depth)
         
         self.fc = nn.Linear(embed_dim, num_classes)
     

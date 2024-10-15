@@ -1,9 +1,14 @@
+#TODO replace the print handling in this class with proper logging. pvc5
+#TODO clean up the binarization to handle variable groups
+#TODO pull fov names from the table to reduce the number of iterations through the directory
 import os
 import tifffile as tiff
 import numpy as np
 import torch 
 from torch import nn 
 from torch.utils.data import Dataset
+import polars as pl
+import logging
 
 class MibiDataset(Dataset):
     """
@@ -21,14 +26,23 @@ class MibiDataset(Dataset):
         labels (list): List of corresponding labels for the images.
     """
 # Dataset to handle FOVs and TIFF images, patch them into squares of configurable sizes
-    def __init__(self, root_dir,df, patch_size_x=128, patch_size_y=128,prefix='FOV',fov_col='FOV',label_col='Group', transform=None):
+    def __init__(self, root_dir,df, patch_size_x=128, patch_size_y=128,prefix='FOV',fov_col='FOV',label_col='Group', transform=None,expressions=None):
         self.root_dir = root_dir
         self.patch_size_x = patch_size_x
         self.patch_size_y = patch_size_y
         self.transform = transform
+        self.expressions=expressions
         self.image_paths,self.labels = self._load_image_paths(prefix,df,fov_col,label_col)
-
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[
+            logging.FileHandler("mibi_dataset.log"),
+            logging.StreamHandler()
+        ])
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+        
+        
     def _load_image_paths(self,prefix,df,fov_col,label_col):
+        
         """
         Loads the image paths and corresponding labels from the specified DataFrame.
 
@@ -37,7 +51,7 @@ class MibiDataset(Dataset):
         FOV column. If a match is found, it retrieves the corresponding label from the label column, binarizes it, 
         and appends the image paths and labels to their respective lists.
 
-        Args:
+        Parameters:
             prefix (str): The prefix to filter the FOV directories.
             df (DataFrame): The DataFrame containing FOV and label information.
             fov_col (str): The column name in the DataFrame that contains FOV identifiers.
@@ -49,60 +63,106 @@ class MibiDataset(Dataset):
         image_paths = []
         labels=[]
         
-        # Iterate over each FOV directory
+        #Iterate over each FOV directory
+        #five if checks to achieve this is hard to parse need to rethink approac
         for fov_dir in os.listdir(self.root_dir):
-            if fov_dir.startswith(prefix):
+            if fov_dir.startswith(prefix):#replace with Pathlib matching later
                 fov_path = os.path.join(self.root_dir, fov_dir)
                 
                 if os.path.isdir(fov_path):
+                    #print(fov_dir)
                     # check if the folder name exists in the "FOV" column of the DataFrame
-                    group = df[df[fov_col] == fov_dir]  # Compare with the "FOV" column
-                    if not group.empty:
+                    group = df.filter(pl.col(fov_col) == fov_dir)  #why oh why did I decide to decide to use polars instead of pandas for this test?
+                    if group.height>0:
                         # pull the matching data from the "group" column
-                        group_data = group[label_col].values[0]  
-                        binarized_data = self.binarize_group(group_data)  # Binarize the group data
                         
-                        tif_path = os.path.join(fov_path, 'TIF')
+                        group_data = group[label_col].to_list()[0]  
+                        binarized_data = self._binarize_group(group_data)  # Binarize the group data
+                        #print(group_data,binarized_data)
+                        tif_path = os.path.join(fov_path, 'TIFs')
                         if os.path.exists(tif_path):
                             # Load all .tiff files ignoring those with "segmentation in the name"
+                            sublist=[]
+                            labels.append(binarized_data)
                             for image_file in os.listdir(tif_path):
-                                if image_file.endswith('.tiff') and 'segmentation' not in image_file:
-                                    image_paths.append(os.path.join(tif_path, image_file))
-                                    labels.append(binarized_data)
-            
-        return image_paths
-    def _binarize_group(group_data,mapping=None):
-        if mapping is not None:
-            #Need to implement this later
-            raise Exception("Only Default mapping currently implemented")
-        else:
-            # Default mapping behavior
-            if str(group_data) in ['G1', 'G4']:
-                return 1  # Map groups 1 and 4 to label 1
-            elif str(group_data) in ['G2', 'G3']:
-                return 0  # Map groups 2 and 3 to label 0
-            else:
-                raise Exception("Group Data does not align with Expected Groups")  # Return original value if it doesn't match any group
+                                if self.expressions:# this is a list of expression names we want to make sure are in the dataset. 
+                                    if image_file in self.expressions:
+                                        sublist.append(os.path.join(tif_path, image_file))
+                                else:
+                                    if (image_file.endswith('.tif') or image_file.endswith('.tiff')) and ('segmentation' not in image_file) and not (image_file[0].isdigit()):
+                                        sublist.append(os.path.join(tif_path, image_file))
+                            
 
+                            sublist.sort()#Should normalize the data assuming the data format is maintained true for this dataset 
+                            #should create a perminant mapping
+                            image_paths.append(sublist)
+                        num_sublists = len(sublist)
+                        logging.info(f"FOV: {fov_dir}, Number of sublists: {num_sublists}")
+
+                        #else:
+                            #print(f"Skipped {fov_dir} because TIF does not exist")
+                    #else:
+                       #print(f"Skipped {fov_dir} because its not in the table of labels")
+                #else:
+                    #print(f"Skipped {fov_dir} because its not in the root_dir")
+
+        return image_paths,labels
+    
+    def _binarize_group(self,group_data):
+        #Assumes a desired class structure 
+        if str(group_data) in ['G1', 'G4']:
+            return 1 
+        elif str(group_data) in ['G2', 'G3']:
+            return 0  
+        else:
+            raise Exception("Group Data does not align with Expected Groups")  
 
     def __len__(self):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
-        image_path = self.image_paths[idx]
-        image = tiff.imread(image_path)  # Load 2048x2048 image
+        """
+        Retrieves the image and label data for a specific index in the dataset.
+
+        Parameters:
+            idx (int): The index of the data item to retrieve.
+
+        Returns:
+            tuple: A tuple containing:
+                - patches (list): A list of image patches extracted from the stacked image.
+                - label (int): The label corresponding to the data item.
+                - patches_loc (list): A list of tuples indicating the top-left coordinates of each patch.
+        
+        Raises:
+            IndexError: If the index is out of bounds for the dataset.
+        """
+        fov_paths = self.image_paths[idx]
+        image = self._image_stacker(fov_paths=fov_paths)  # Load 2048x2048 image
         label=self.labels[idx]
         
         patches = []
-        for i in range(0, image.shape[0], self.patch_size_x):
-            for j in range(0, image.shape[1], self.patch_size_y):
-                patch = image[i:i+self.patch_size_x, j:j+self.patch_size_y]
+        patches_loc=[]
+        for i in range(0, image.shape[1], self.patch_size_x):
+            for j in range(0, image.shape[2], self.patch_size_y):
+                patch = image[:,i:i+self.patch_size_x, j:j+self.patch_size_y]
                 
                 if self.transform:
                     patch = self.transform(patch)
-                
+                #print(patch.shape)
                 patches.append(patch)
+                patches_loc.append((i,j))
         
-        # Convert list of patches into a tensor
-        patches = torch.stack(patches)  # Shape: (num_patches, patch_size_x, patch_size_y)
-        return patches,label
+        return patches,label,patches_loc,fov_paths
+    
+    def _image_stacker(self,fov_paths):
+
+        stacked_image = None
+        for path in fov_paths:
+            image = tiff.imread(path) 
+            if stacked_image is None:
+                stacked_image = np.expand_dims(image,axis=0)  
+            else:
+                stacked_image = np.concatenate((stacked_image, np.expand_dims(image,axis=0)), axis=0)  
+    
+        return stacked_image
+
