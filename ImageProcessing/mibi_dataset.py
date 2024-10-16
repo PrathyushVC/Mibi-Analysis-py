@@ -1,6 +1,5 @@
 #TODO replace the print handling in this class with proper logging. pvc5
 #TODO clean up the binarization to handle variable groups
-#TODO pull fov names from the table to reduce the number of iterations through the directory
 import os
 import tifffile as tiff
 import numpy as np
@@ -24,6 +23,7 @@ class MibiDataset(Dataset):
         transform (callable, optional): Optional transform to be applied on a sample.
         image_paths (list): List of paths to the TIFF images.
         labels (list): List of corresponding labels for the images.
+        expressions: Approved lists of protein expressions as .tif files that are shared across desired samples
     """
 # Dataset to handle FOVs and TIFF images, patch them into squares of configurable sizes
     def __init__(self, root_dir,df, patch_size_x=128, patch_size_y=128,prefix='FOV',fov_col='FOV',label_col='Group', transform=None,expressions=None):
@@ -32,13 +32,7 @@ class MibiDataset(Dataset):
         self.patch_size_y = patch_size_y
         self.transform = transform
         self.expressions=expressions
-        self.image_paths,self.labels = self._load_image_paths(prefix,df,fov_col,label_col)
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[
-            logging.FileHandler("mibi_dataset.log"),
-            logging.StreamHandler()
-        ])
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
+        self.image_paths,self.labels = self._load_image_paths(prefix,df,fov_col,label_col)#Needs to be last as it needs everything else to exist
         
         
     def _load_image_paths(self,prefix,df,fov_col,label_col):

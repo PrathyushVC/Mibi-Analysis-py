@@ -37,4 +37,5 @@ class ViTBinaryClassifier(nn.Module):
         
         # Classification head
         out = self.fc(cls_output)  # (batch_size * patches_per_image, num_classes)
+        
         return out
