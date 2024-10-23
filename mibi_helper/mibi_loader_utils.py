@@ -1,18 +1,4 @@
-'''
-This script is a python implementation of the Mibi-loader function
-It currently assumes the data is organized as 
 
-inputs:
-    root: The data dir
-    expressiontypes: the expression types of interest as a list if strings. Note that by default this is built to assume you want a subset of 5 of them
-    grp: list of grps currently assumes two
-    T_path: the excel spread sheet of cell segmentations needed to run the code
-    save_path: where to write the resulting npz files. if you dont provide it it will use your cwd
-outputs:
-    will generate a npz file with the expression image, the segmentation, and the clustered segmentation.
-    (we may need to change this so that the output is a 3d volume which would save space)
-    
-'''
 
 import os
 import numpy as np
@@ -24,6 +10,20 @@ import concurrent.futures
 
 
 def mibi_loader(root=None, expressiontypes=None, T_path=None,save_directory = None,updated_cluster_map=None):
+
+    """
+    Loads Mibi data from the specified root directory and prepares it for analysis.
+
+    Args:
+        root (str): The root directory containing the data files.
+        expressiontypes (list): A list of expression types to be considered. If None, defaults to a predefined list.
+        T_path (str): The path to the CSV file containing the data. If None, defaults to a specific file in the root directory.
+        save_directory (str): The directory where output files will be saved. If None, defaults to the current working directory.
+        updated_cluster_map (dict): An optional dictionary to update the cluster mapping.
+
+    Returns:
+        str: The path to the CSV file that was read.
+    """
     # Check if the inputs are not provided and provide default values It is done this way as several of the inputs are long paths and made the function def really hard to read
     if root is None:
         raise ValueError("root cannot be None. Please provide a valid input.")
@@ -98,6 +98,22 @@ def mibi_loader(root=None, expressiontypes=None, T_path=None,save_directory = No
 
             
 def process_directory(root, dirname, expressiontypes, clusters, cluster_map,T, fov_to_patient_map,save_directory):
+    """
+    Processes a directory containing image data and associated metadata.
+
+    Args:
+        root (str): The root directory containing the data.
+        dirname (str): The name of the directory to process.
+        expressiontypes (list): A list of expression types to analyze.
+        clusters (array-like): An array of unique cluster identifiers.
+        cluster_map (dict): A mapping of cluster identifiers to their corresponding values.
+        T (DataFrame): A DataFrame containing metadata about the images.
+        fov_to_patient_map (dict): A mapping of field of view (FOV) identifiers to patient numbers.
+        save_directory (str): The directory where processed data will be saved.
+
+    Returns:
+        None: This function does not return a value. It saves processed data to the specified directory.
+    """
     segmentation_path = os.path.join(root,dirname,'TIFs', 'segmentation_labels.tiff')
     FOV_table = T[T['fov'] == dirname]
     # Replace with the FOV you want to look up
@@ -127,6 +143,21 @@ def process_directory(root, dirname, expressiontypes, clusters, cluster_map,T, f
      
 
 def segmentation_grouper(segmentation, T, clusters, cluster_map):
+    """
+    Groups the segmentation labels based on the provided clusters and their corresponding mapping.
+
+    This function takes a segmentation array and a DataFrame containing metadata about the clusters. 
+    It assigns each label in the segmentation to a cluster based on the mapping provided in the cluster_map.
+
+    Args:
+        segmentation (np.ndarray): A 2D array representing the segmentation labels.
+        T (DataFrame): A DataFrame containing metadata about the clusters and their labels.
+        clusters (array-like): An array of unique cluster identifiers.
+        cluster_map (dict): A mapping of cluster identifiers to their corresponding values.
+
+    Returns:
+        np.ndarray: A 2D array where each pixel is assigned a cluster identifier based on the segmentation labels.
+    """
     clustered_seg = np.zeros(segmentation.shape, dtype=int)
     for cluster in clusters:
         cluster_table = T[T['pred'] == cluster]
@@ -136,6 +167,17 @@ def segmentation_grouper(segmentation, T, clusters, cluster_map):
     return clustered_seg
 
 def find_files_ending(directory,subscript_search='.npz'):
+    """
+    Finds all files in the specified directory that end with a given substring.
+
+    Args:
+        directory (str): The path to the directory where the search will be performed.
+        subscript_search (str): The substring to search for at the end of the file names. 
+                                Default is '.npz'.
+
+    Returns:
+        list: A list of file paths that match the search criteria.
+    """
     npz_files = []
     for root, dirs, files in os.walk(directory):
         for file in files:

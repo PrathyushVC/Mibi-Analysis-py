@@ -24,12 +24,12 @@ class ViTBinaryClassifier(nn.Module):
         x = self.patch_embed(x)  # (batch_size * patches_per_image, embed_dim, num_patches_x, num_patches_y)
         x = x.flatten(2).transpose(1, 2)  # (batch_size * patches_per_image, num_patches, embed_dim)
         
-        # Add class token and positional embedding
+       
         cls_token = self.cls_token.expand(x.size(0), -1, -1)  # (batch_size * patches_per_image, 1, embed_dim)
         x = torch.cat((cls_token, x), dim=1)  # (batch_size * patches_per_image, num_patches + 1, embed_dim)
         x = x + self.pos_embed
         
-        # Transformer blocks
+        
         x = self.transformer(x)  # (batch_size * patches_per_image, num_patches + 1, embed_dim)
         
         # Use the [CLS] token for classification

@@ -6,22 +6,7 @@ import json
 import warnings
 
 def MibiLoader_old(root=None, expressiontypes=None, grps=None, T_path=None,save_directory = None):
-    '''
-This script is a python implementation of the Mibi-loader function
-It currently assumes the data is organized into groups which each have subfolders for each patient 
-this is subject to change as we recieve new data
-
-inputs:
-    root: The data dir
-    expressiontypes: the expression types of interest as a list if strings. Note that by default this is built to assume you want a subset of 5 of them
-    grp: list of grps currently assumes two
-    T_path: the excel spread sheet of cell segmentations needed to run the code
-    save_path: where to write the resulting npz files. if you dont provide it it will use your cwd
-outputs:
-    will generate a npz file with the expression image, the segmentation, and the clustered segmentation.
-    (we may need to change this so that the output is a 3d volume which would save space)
-    
-    '''
+   
     warnings.warn(
     "This module is deprecated and designed only for a limited trial dataset. Please use mibi_loader instead.",
     DeprecationWarning,
