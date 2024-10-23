@@ -1,5 +1,3 @@
-#TODO replace the print handling in this class with proper logging. pvc5
-#TODO clean up the binarization to handle variable groups
 import os
 
 import torch
@@ -22,12 +20,18 @@ class MibiDataset(Dataset):
         labels (list): List of corresponding labels for the images.
         expressions: Approved lists of protein expressions as .tif files that are shared across desired samples
     """
-# Dataset to handle FOVs and TIFF images, patch them into squares of configurable sizes
     def __init__(self, hdf5_path, transform=None):
         self.hdf5_path=hdf5_path
         self.transform=transform
         with h5py.File(hdf5_path, 'r') as f:
-            self.num_samples = f['patches'].shape[0]  # Get number of samples
+            self.num_samples = f['patches'].shape[0]  
+
+        self.labels = []  
+        with h5py.File(hdf5_path, 'r') as f:
+            self.labels = f['labels'][:] 
+            self.class_counts = {label: 0 for label in set(self.labels)}  
+            for label in self.labels:
+                self.class_counts[label] += 1 
 
 
     def __len__(self):
@@ -35,9 +39,9 @@ class MibiDataset(Dataset):
 
     def __getitem__(self, index):
         with h5py.File(self.hdf5_path, 'r') as f:
-            patch = f['patches'][index]  # Load the patch
-            label = f['labels'][index]  # Load the label
-            location = f['locations'][index]  # Load the location (if needed)
+            patch = f['patches'][index]  
+            label = f['labels'][index]  
+            #location = f['locations'][index]  # Load the location (if needed)
         patch= torch.tensor(patch, dtype=torch.float32)
-        label = torch.tensor(label, dtype=torch.float32)
-        return patch,label,location
+        label = torch.tensor(label, dtype=torch.long)
+        return patch,label
