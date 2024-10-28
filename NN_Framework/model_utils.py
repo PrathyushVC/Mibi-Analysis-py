@@ -13,13 +13,14 @@ from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 from torchmetrics import Accuracy, F1Score, Precision, Recall, ConfusionMatrix
 import mlflow
+from mlflow.utils.logging_utils import disable_logging,enable_logging
 #TODO switch to logging after initial tests
 
 
 class EarlyStopping:
     """EarlyStopping is a utility class to stop training when a monitored metric has stopped improving.
 
-    Attributes:
+    Args:
         patience (int): Number of epochs with no improvement after which training will be stopped.
         delta (float): Minimum change in the monitored quantity to qualify as an improvement.
         verbose (bool): If True, prints a message for each validation loss improvement.
@@ -27,8 +28,9 @@ class EarlyStopping:
         counter (int): Counter for the number of epochs since the last improvement.
         best_loss (float): The best validation loss observed.
         early_stop (bool): Flag indicating whether to stop training.
+    simplified version of https://github.com/pytorch/ignite/blob/master/ignite/handlers/early_stopping.py
     """
-    def __init__(self, patience=5, delta=0.01, verbose=True, path='best_model.pth'):
+    def __init__(self, patience=5, delta=0.01, verbose=True,path='best_model.pth'):
         """Initializes the EarlyStopping object.
 
         Args:
@@ -126,7 +128,7 @@ def compute_metrics(predictions, labels, num_classes, device):
 
 
 def train_model(model, train_loader, val_loader, criterion, optimizer, device, location, 
-    epochs=50, patience=25, delta=0.00000001, check_val_freq=5,num_classes=2, log_with_mlflow=True,mlflow_uri="http://127.0.0.1:5000"):
+    epochs=50, patience=25, delta=0.00000001, check_val_freq=5,num_classes=2,model_name='model', log_with_mlflow=True,mlflow_uri="http://127.0.0.1:5000"):
     """
     Train Model
 
@@ -151,92 +153,106 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, device, l
     Returns:
         None
     """
-    model.to(device)
-    early_stopping = EarlyStopping(patience=patience, delta=delta, path=os.path.join(location, 'best_model.pth'))
-    writer = SummaryWriter(log_dir=location)
-    
-    train_losses, val_losses = [], []
-    train_accuracies, val_accuracies = [], []
+    #try:
+    if 1==1:
+        model.to(device)
+        early_stopping = EarlyStopping(patience=patience, delta=delta, path=os.path.join(location, model_name+'best_model.pth'))
+        writer = SummaryWriter(log_dir=location)
+        
+        train_losses, val_losses = [], []
+        train_accuracies, val_accuracies = [], []
 
-    if log_with_mlflow:
-        mlflow.set_tracking_uri(mlflow_uri)  
-        mlflow.start_run()  
+        if log_with_mlflow: 
+            mlflow.set_tracking_uri(mlflow_uri)
+            run_name = f"{model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            with mlflow.start_run(run_name=run_name) as run:
+                run_id=run.info.run_id
+                print(f"Started MLflow run with ID: {run.info.run_id}")
+            # Log model and optimizer parameters
+                for param in ["img_size_x", "patch_size_x", "embed_dim", "num_heads", "depth", "mlp_dim", "dropout_rate", "weight_decay"]:
+                    mlflow.log_param(param, model.hparams.get(param, float('nan')))
+                disable_logging()
 
-        # Log model and optimizer parameters
-        for param in ["img_size_x", "patch_size_x", "embed_dim", "num_heads", "depth", "mlp_dim", "dropout_rate", "weight_decay"]:
-            mlflow.log_param(param, model.hparams.get(param, float('nan')))
+        for epoch in range(1, epochs + 1):
+            # Training Phase
+            model.train()
+            total_train_loss, correct_train, total_train = 0, 0, 0
+            all_train_predictions, all_train_labels = [], []
 
-    for epoch in range(1, epochs + 1):
-        # Training Phase
-        model.train()
-        total_train_loss, correct_train, total_train = 0, 0, 0
-        all_train_predictions, all_train_labels = [], []
+            for patches, labels in train_loader:
+                patches, labels = patches.to(device), labels.to(device)
 
-        for patches, labels in train_loader:
-            patches, labels = patches.to(device), labels.to(device)
+                optimizer.zero_grad()
+                outputs = model(patches)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
 
-            optimizer.zero_grad()
-            outputs = model(patches)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+                total_train_loss += loss.item()
+                _, predicted = torch.max(outputs, 1)
+            # print(labels,predicted,loss)
+                correct_train += (predicted == labels).sum().item()
+                total_train += labels.size(0)
 
-            total_train_loss += loss.item()
-            _, predicted = torch.max(outputs, 1)
-           # print(labels,predicted,loss)
-            correct_train += (predicted == labels).sum().item()
-            total_train += labels.size(0)
+                all_train_predictions.append(predicted)
+                all_train_labels.append(labels)
 
-            all_train_predictions.append(predicted)
-            all_train_labels.append(labels)
+            avg_train_loss = total_train_loss / len(train_loader)
+            train_accuracy = 100 * correct_train / total_train
 
-        avg_train_loss = total_train_loss / len(train_loader)
-        train_accuracy = 100 * correct_train / total_train
+            train_metrics = compute_metrics(
+                torch.cat(all_train_predictions), torch.cat(all_train_labels), num_classes, device
+            )
 
-        train_metrics = compute_metrics(
-            torch.cat(all_train_predictions), torch.cat(all_train_labels), num_classes, device
-        )
+            print(f"Epoch {epoch}, Train Loss: {avg_train_loss:.4f}, Train Acc: {train_metrics['accuracy']:.2f}%")
+            train_losses.append(avg_train_loss)
+            train_accuracies.append(train_accuracy)
 
-        print(f"Epoch {epoch}, Train Loss: {avg_train_loss:.4f}, Train Acc: {train_metrics['accuracy']:.2f}%")
-        train_losses.append(avg_train_loss)
-        train_accuracies.append(train_accuracy)
+            writer.add_scalar("Loss/train", avg_train_loss, epoch)
+            writer.add_scalar("Accuracy/train", train_metrics["accuracy"], epoch)
 
-        writer.add_scalar("Loss/train", avg_train_loss, epoch)
-        writer.add_scalar("Accuracy/train", train_metrics["accuracy"], epoch)
-
-        if log_with_mlflow:
-            mlflow.log_metric("train_loss", avg_train_loss, step=epoch)
-            mlflow.log_metric("train_accuracy", train_metrics["accuracy"], step=epoch)
-            mlflow.log_metric("train_f1_score", train_metrics["f1_score"], step=epoch)
-            mlflow.log_metric("train_precision", train_metrics["precision"], step=epoch)
-            mlflow.log_metric("train_recall", train_metrics["recall"], step=epoch)
-
-        # Validation Phase (only every `check_val_freq` epochs)
-        if epoch % check_val_freq == 0:
-            avg_val_loss, val_metrics = eval_model(
-                model, val_loader, criterion, device, num_classes, writer, epoch)
             if log_with_mlflow:
-                mlflow.log_metric("val_loss", avg_val_loss, step=epoch)
-                mlflow.log_metric("val_accuracy", val_metrics["accuracy"], step=epoch)
-                mlflow.log_metric("val_f1_score", val_metrics["f1_score"], step=epoch)
-                mlflow.log_metric("val_precision", val_metrics["precision"], step=epoch)
-                mlflow.log_metric("val_recall", val_metrics["recall"], step=epoch)
+                with mlflow.start_run(run_id=run_id) as run:
+                    mlflow.log_metric("train_loss", avg_train_loss, step=epoch)
+                    mlflow.log_metric("train_accuracy", train_metrics["accuracy"], step=epoch)
+                    mlflow.log_metric("train_f1_score", train_metrics["f1_score"], step=epoch)
+                    mlflow.log_metric("train_precision", train_metrics["precision"], step=epoch)
+                    mlflow.log_metric("train_recall", train_metrics["recall"], step=epoch)
 
-            
-            early_stopping(avg_val_loss, model)
-            if early_stopping.early_stop:
-                print("Early stopping triggered.")
+            # Validation Phase (only every `check_val_freq` epochs)
+            if epoch % check_val_freq == 0:
+                avg_val_loss, val_metrics = eval_model(
+                    model, val_loader, criterion, device, num_classes, epoch)
+                if log_with_mlflow:
+                    with mlflow.start_run(run_id=run_id) as run:
+                        mlflow.log_metric("val_loss", avg_val_loss, step=epoch)
+                        mlflow.log_metric("val_accuracy", val_metrics["accuracy"], step=epoch)
+                        mlflow.log_metric("val_f1_score", val_metrics["f1_score"], step=epoch)
+                        mlflow.log_metric("val_precision", val_metrics["precision"], step=epoch)
+                        mlflow.log_metric("val_recall", val_metrics["recall"], step=epoch)
 
-                return train_losses, val_losses, train_accuracies, val_accuracies
+                
+                early_stopping(avg_val_loss, model)
+                if early_stopping.early_stop:
+                    print("Early stopping triggered.")
+
+                    return train_losses, val_losses, train_accuracies, val_accuracies
 
 
-    writer.close()
-    if log_with_mlflow:
-        mlflow.end_run()
+        writer.close()
+        if log_with_mlflow:
+            mlflow.end_run()
+
+    #except Exception as e:
+    #    print(f"An error occurred during training: {e}")
+    #    print(f"Closing logging")
+    #    writer.close()
+    #   if log_with_mlflow:
+    #        mlflow.end_run()
 
     return train_losses, val_losses, train_accuracies, val_accuracies
 
-def eval_model(model, val_loader, criterion, device, num_classes, writer, epoch):
+def eval_model(model, val_loader, criterion, device, num_classes, epoch):
     """
     Evaluates the model on the validation dataset.
 
@@ -274,17 +290,11 @@ def eval_model(model, val_loader, criterion, device, num_classes, writer, epoch)
     val_metrics = compute_metrics(
         torch.cat(all_val_predictions), torch.cat(all_val_labels), num_classes, device
     )
-
-    # Log metrics to TensorBoard
-    writer.add_scalar("Loss/val", avg_val_loss, epoch)
-    writer.add_scalar("Accuracy/val", val_metrics["accuracy"], epoch)
-
-    # Log to MLflow
-    mlflow.log_metric("val_loss", avg_val_loss, step=epoch)
-    mlflow.log_metric("val_accuracy", val_metrics["accuracy"], step=epoch)
+    print(f"Validation Loss: {avg_val_loss:.4f}, Validation Accuracy: {val_metrics['accuracy']:.2f}%")
 
     print(f"Epoch {epoch}, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_metrics['accuracy']:.2f}%")
-    print(f"Class-wise Metrics: {val_metrics}")
+    print(f"Class-wise Metrics: ")
+
 
     return avg_val_loss, val_metrics
 

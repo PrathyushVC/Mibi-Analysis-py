@@ -69,3 +69,4 @@ class ViTBinaryClassifier(nn.Module):
         
         out = self.fc(cls_output)  # (batch_size, num_classes)
         return out
+

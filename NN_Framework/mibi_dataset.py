@@ -11,7 +11,7 @@ class MibiDataset(Dataset):
     This dataset is designed to load images from a specified directory, patch them into smaller squares of configurable sizes,
     and provide the necessary transformations. It also supports binarization of group labels based on a provided DataFrame.
 
-    Attributes:
+    Args:
         root_dir (str): The root directory containing the FOV directories with TIFF images.
         patch_size_x (int): The height of the patches to be extracted from the images.
         patch_size_y (int): The width of the patches to be extracted from the images.
@@ -20,9 +20,10 @@ class MibiDataset(Dataset):
         labels (list): List of corresponding labels for the images.
         expressions: Approved lists of protein expressions as .tif files that are shared across desired samples
     """
-    def __init__(self, hdf5_path, transform=None):
+    def __init__(self, hdf5_path, transform=None,expressions=None):
         self.hdf5_path=hdf5_path
         self.transform=transform
+        self.hdf5_expressions=expressions
         with h5py.File(hdf5_path, 'r') as f:
             self.num_samples = f['patches'].shape[0]  
 
