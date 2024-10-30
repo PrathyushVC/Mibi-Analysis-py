@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import polars as pl
 import torch
 import torch.nn as nn
@@ -44,8 +45,9 @@ def create_global_cell_mapping(df, cell_type_col):
 
 def map_cell_types_to_indices(df, cell_type_col, cell_type_to_index):
     """Map cell types to their corresponding indices."""
-    df=df.with_columns(pl.col(cell_type_col).replace(cell_type_to_index).cast(pl.Int32).alias(cell_type_col+'_map'))
+    df=df.with_columns(pl.col(cell_type_col).replace(cell_type_to_index).cast(pl.Int32).alias(cell_type_col+'_int_map'))
     return df
+
 def create_hetero_graph(df, expressions, cell_type_col=None, radius=50, 
                         x_pos='centroid-0', y_pos='centroid-1', 
                         fov_col='fov', group_col='Group', binarize=False, embedding_dim=4):
@@ -65,7 +67,7 @@ def create_hetero_graph(df, expressions, cell_type_col=None, radius=50,
         
 
         try:
-            print(df_fov.select(expressions).to_numpy())
+           
             data_to_numpy=df_fov.select(expressions).to_numpy()
         except Exception as e:
             raise TypeError(f"Columns contained non numerical types can not be converted to numpy:  {str(e)}")
@@ -75,10 +77,12 @@ def create_hetero_graph(df, expressions, cell_type_col=None, radius=50,
 
         if cell_type_col:
             # Map cell types to indices and generate embeddings
+
+            df_fov=map_cell_types_to_indices(df_fov, cell_type_col, cell_type_index)
             cell_type_indices = torch.tensor(
-                map_cell_types_to_indices(df_fov, cell_type_col, cell_type_index), 
+                df_fov[cell_type_col+'_int_map'].to_numpy(), 
                 dtype=torch.long
-            )
+            )#hard coded new column for debugging
             cell_embeddings = cell_type_embedding(cell_type_indices)
 
             
@@ -128,15 +132,63 @@ def dataset_overlap(df1, df2, col):
     else:
         print("No overlap in patient numbers.")
 
+
+
+
+def remapping(df, column_name):
+    # Define the mapping as a dictionary
+    group_mapping = {
+        'CD4 T cell': 'CD4_T_cell',
+        'Memory_CD4_T_Cells': 'Memory_CD4_T_Cells',
+        'CD8 T cell': 'CD8_T_cell',
+        'CD4 APC': 'DCs',
+        'CD4 Treg': 'CD4_Treg',
+        'CD3 only': 'CD3',
+        'B cell': 'B_Cells',
+        'Follicular_Germinal_B_Cell': 'Germinal_Center_B_Cell',
+        'CD20_neg_B_cells': 'B_Cells',
+        'DC sign Mac': 'MAC',
+        'CD206_Mac': 'MAC',
+        'CD68_Mac': 'MAC',
+        'Mac': 'MAC',
+        'DCs': 'DCs',
+        'CD14_CD11c_DCs': 'DCs',
+        'CD11_CD11c_DCsign_DCs': 'DCs',
+        'Mono_CD14_DR': 'MAC',
+        'tumor': 'tumor',
+        'Hevs': 'Hevs',
+        'Collagen_sma': 'Stroma',
+        'SMA': 'Stroma',
+        'Collagen': 'Stroma',
+        'Neutrophil': 'Neutrophil',
+        'Tfh': 'CD4_T_cell',
+        'NK cell': 'NK cell',
+        'Immune': 'Immune',
+        'Unidentified': 'Unidentified',
+        'blood vessels': 'blood vessels',
+    }
+    
+    if isinstance(df, pd.DataFrame):  
+        df['remapped'] = df[column_name].map(group_mapping).fillna('Unidentified')
+    elif isinstance(df, pl.DataFrame): 
+        df = df.with_columns(pl.col(column_name).replace(group_mapping).alias('remapped'))
+    else:
+        raise ValueError("Input DataFrame must be either a Pandas or Polars DataFrame.")
+
+    return df
+
+
+
 if __name__ == "__main__":
-    # Load data
     df = pl.read_csv(r"D:\MIBI-TOFF\Data_For_Amos\cleaned_expression_with_both_classification_prob_spatial_30_08_24.csv")
     expressions = ['CD45']
 
-    df = df[~df['pred'].isin(['Unidentified', 'Immune'])]#Remove confounding cells
+    df = df.filter(~pl.col('pred').is_in(['Unidentified', 'Immune']))#Remove confounding cells
 
-    # Create graphs
-    graphs = create_hetero_graph(df, expressions, cell_type_col='pred', radius=50)
+    df=remapping(df=df, column_name='pred')#remap larger cell name list to smaller one 
+
+    
+    graphs = create_hetero_graph(df, expressions, cell_type_col='remapped', radius=50)
     torch.save(graphs, 'fov_graphs.pt')
     print(f"Saved {len(graphs)} graphs.")
 
