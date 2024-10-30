@@ -4,11 +4,11 @@ import torch
 import torch.nn as nn
 #TODO test SWINTRANSFORMER
 
-class ViTBinaryClassifier(nn.Module):
-    def __init__(self, img_size_x, img_size_y, in_channels=1, num_classes=2, 
+class ViTClassifier(nn.Module):
+    def __init__(self, img_size_x, img_size_y, in_channels=1, num_classes=4, 
                  patch_size_x=16, patch_size_y=16, embed_dim=768, num_heads=12, 
                  depth=12, mlp_dim=3072, dropout_rate=0.1, weight_decay=1e-5):
-        super(ViTBinaryClassifier, self).__init__()
+        super(ViTClassifier, self).__init__()
 
         self.hparams = {
             'img_size_x': img_size_x,
@@ -69,4 +69,6 @@ class ViTBinaryClassifier(nn.Module):
         
         out = self.fc(cls_output)  # (batch_size, num_classes)
         return out
+    
+
 

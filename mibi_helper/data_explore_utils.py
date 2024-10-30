@@ -5,6 +5,7 @@ import os
 import tifffile as tiff
 from matplotlib.lines import Line2D
 import re
+import csv
 
 def data_exploration_plots(FOV_directory, ncols=3, marker_inds=[0, 3, 5], 
                            expression_types=None, paired_cell_types=None, colorArr=None):
@@ -143,6 +144,92 @@ def imlegend(marker_inds, colorArr, labelsArr, cell_types):
 def extract_fov(path):
     match=re.search(r'F0V\d+',path)
     return match.group(0) if match else 'Unknown'
+
+def getTumorCount(filePath):
+
+    table=[]
+    patient={}
+
+    '''
+    Each table entry looks like:
+    [Patient #, Group#, Tumor Cell Count#, FOVS]
+    
+    Below code is only for group 3 and group 4.
+    
+    '''
+    validGroups=["G3","G4"]
+    with open(filePath,mode='r') as file:
+        cellClassifications=csv.reader(file)
+
+        for row in cellClassifications:
+            if (row[0] == ''):
+                continue
+            patientNum, GroupNum, cellType,FOV= int(row[-1]), row[-2], row[-7],row[-8]
+            if GroupNum in validGroups:
+
+                if (patientNum not in patient):
+                    patient[patientNum]=[GroupNum,0,set()] 
+                    
+                if (cellType=='tumor'):
+                    patient[patientNum][1]+=1 
+                    patient[patientNum][2].add(FOV)
+       
+        for p in patient:
+            table.append([p,patient[p][0],patient[p][1],", ".join(patient[p][2])])
+        table=sorted(table)
+        with open('Tumor_Count_With_FOV.csv', 'w') as fp:
+            header=["Patient", "Group", "Tumor Cell Count", "FOVs"]
+            writer = csv.writer(fp, delimiter=',')
+            writer.writerow(header)
+            for row in table:
+                writer.writerow(row)
+        
+
+        return
+    
+
+def getCD4TCount(filePath):
+
+    table=[]
+    patient={}
+
+    '''
+    Each table entry looks like:
+    [Patient #, Group#, CD4T Cell Count#, FOVS]
+    
+    Below code is only for group 1 and group 2.
+    
+    '''
+    validGroups=["G1","G2"]
+    with open(filePath,mode='r') as file:
+        cellClassifications=csv.reader(file)
+
+        for row in cellClassifications:
+            if (row[0] == ''):
+                continue
+            patientNum, GroupNum, cellType,FOV= int(row[-1]), row[-2], row[-7],row[-8]
+            if GroupNum in validGroups:
+
+                if (patientNum not in patient):
+                    patient[patientNum]=[GroupNum,0,set()] 
+                    
+                if (cellType=='CD4 T cell'):
+                    patient[patientNum][1]+=1 
+                    patient[patientNum][2].add(FOV)
+       
+        for p in patient:
+            table.append([p,patient[p][0],patient[p][1],", ".join(patient[p][2])])
+        table=sorted(table)
+        with open('CD4_T_Count_With_FOV.csv', 'w') as fp:
+            header=["Patient", "Group", "Tumor Cell Count", "FOVs"]
+            writer = csv.writer(fp, delimiter=',')
+            writer.writerow(header)
+            for row in table:
+                writer.writerow(row)
+        
+
+        return
+        
 
 if __name__ == "__main__":
     FOV_directory = 'D:/MIBI-TOFF/Data_For_Amos/FOV176'  # Adjust your directory path
