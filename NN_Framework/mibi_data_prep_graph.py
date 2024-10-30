@@ -3,8 +3,11 @@ import pandas as pd
 import polars as pl
 import torch
 import torch.nn as nn
-from torch_geometric.data import HeteroData, DataLoader
+from torch_geometric.data import HeteroData
+from torch_geometric.loader import DataLoader
 from scipy.spatial import distance_matrix
+
+#TODO Graph label hard set to on and the model load through data loader
 
 
 
@@ -51,7 +54,8 @@ def map_cell_types_to_indices(df, cell_type_col, cell_type_to_index):
 def create_hetero_graph(df, expressions, cell_type_col=None, radius=50, 
                         x_pos='centroid-0', y_pos='centroid-1', 
                         fov_col='fov', group_col='Group', binarize=False, embedding_dim=4):
-    data = HeteroData()
+    
+    graphs=[]
 
     if cell_type_col:
         num_cell_types = df[cell_type_col].n_unique()
@@ -65,7 +69,7 @@ def create_hetero_graph(df, expressions, cell_type_col=None, radius=50,
 
     for group_key,df_fov in df.group_by(fov_col):
         
-
+        data = HeteroData()
         try:
            
             data_to_numpy=df_fov.select(expressions).to_numpy()
@@ -104,8 +108,8 @@ def create_hetero_graph(df, expressions, cell_type_col=None, radius=50,
         group_value = df_fov[group_col][0]
         graph_label = _binarize_group(group_value) if binarize else _quad_group(group_value)
         data['graph_label'] = torch.tensor([graph_label], dtype=torch.long)
-
-    return data
+        graphs.append(data)
+    return graphs
 
 def _binarize_group(group_data):
     """Binarize group labels."""
@@ -180,6 +184,7 @@ def remapping(df, column_name):
 
 
 if __name__ == "__main__":
+    print("Running mibi_data_prep_graph dirrectly. Are you sure this is a good idea?")
     df = pl.read_csv(r"D:\MIBI-TOFF\Data_For_Amos\cleaned_expression_with_both_classification_prob_spatial_30_08_24.csv")
     expressions = ['CD45']
 
@@ -189,12 +194,16 @@ if __name__ == "__main__":
 
     
     graphs = create_hetero_graph(df, expressions, cell_type_col='remapped', radius=50)
-    torch.save(graphs, 'fov_graphs.pt')
+    torch.save(graphs, r"D:\MIBI-TOFF\Scratch\fov_graphs.pt")
     print(f"Saved {len(graphs)} graphs.")
 
     # Load and test DataLoader
-    loaded_graphs = torch.load('fov_graphs.pt')
-    loader = DataLoader(loaded_graphs, batch_size=2, shuffle=True)
+    loaded_graphs = torch.load(r"D:\MIBI-TOFF\Scratch\fov_graphs.pt")
+
+    for graph in loaded_graphs:
+        print(graph)
+        print(type(graph))
+    loader = DataLoader(loaded_graphs, batch_size=1, shuffle=True)
 
     for batch in loader:
         print(batch)
