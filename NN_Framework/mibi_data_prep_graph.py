@@ -7,7 +7,7 @@ from torch_geometric.data import HeteroData
 from torch_geometric.loader import DataLoader
 from scipy.spatial import distance_matrix
 
-#TODO Graph label hard set to on and the model load through data loader
+#TODO edge values hard set to a single value and the model load through data loader
 
 
 
@@ -136,7 +136,33 @@ def dataset_overlap(df1, df2, col):
     else:
         print("No overlap in patient numbers.")
 
+def print_heterodata_details(hetero_data):#GPTed
+    print("HeteroData Summary:")
+    print("\nNode Types and Features:")
+    for node_type in hetero_data.node_types:
+        num_nodes = hetero_data[node_type].x.size(0)  
+        features = hetero_data[node_type].x  
+        print(f"  - Node Type: {node_type} (Num nodes: {num_nodes})")
+        print(f"    Features (first 5 rows):\n{features[:5]}")  
 
+    
+    print("\nEdge Types and Indices:")
+    for edge_type in hetero_data.edge_types:
+        src, _, dst = edge_type
+        edge_index = hetero_data[edge_type].edge_index 
+        num_edges = edge_index.size(1) 
+        print(f"  - Edge Type: {src} -> {dst} (Num edges: {num_edges})")
+        print(f"    Edge Index (first 5 pairs):\n{edge_index[:, :5]}")  
+
+        
+        if 'edge_attr' in hetero_data[edge_type]:
+            edge_attr = hetero_data[edge_type].edge_attr
+            print(f"    Edge Attributes (first 5 rows):\n{edge_attr[:5]}") 
+
+    
+    if 'graph_label' in hetero_data:
+        graph_labels = hetero_data['graph_label']
+        print(f"\nGraph Labels:\n{graph_labels}")
 
 
 def remapping(df, column_name):
@@ -188,22 +214,23 @@ if __name__ == "__main__":
     df = pl.read_csv(r"D:\MIBI-TOFF\Data_For_Amos\cleaned_expression_with_both_classification_prob_spatial_30_08_24.csv")
     expressions = ['CD45']
 
-    df = df.filter(~pl.col('pred').is_in(['Unidentified', 'Immune']))#Remove confounding cells
+    #df = df.filter(~pl.col('pred').is_in(['Unidentified', 'Immune']))#Remove confounding cells
 
-    df=remapping(df=df, column_name='pred')#remap larger cell name list to smaller one 
+    #df=remapping(df=df, column_name='pred')#remap larger cell name list to smaller one 
 
     
-    graphs = create_hetero_graph(df, expressions, cell_type_col='remapped', radius=50)
-    torch.save(graphs, r"D:\MIBI-TOFF\Scratch\fov_graphs.pt")
-    print(f"Saved {len(graphs)} graphs.")
+    #graphs = create_hetero_graph(df, expressions, cell_type_col='remapped', radius=50)
+    #torch.save(graphs, r"D:\MIBI-TOFF\Scratch\fov_graphs.pt")
+    #print(f"Saved {len(graphs)} graphs.")
 
     # Load and test DataLoader
     loaded_graphs = torch.load(r"D:\MIBI-TOFF\Scratch\fov_graphs.pt")
-
+    print(f"loaded {len(loaded_graphs)} graphs.")
     for graph in loaded_graphs:
-        print(graph)
-        print(type(graph))
+        print_heterodata_details(graph)
+        
     loader = DataLoader(loaded_graphs, batch_size=1, shuffle=True)
-
+    print(loader)
+#
     for batch in loader:
         print(batch)

@@ -1,12 +1,6 @@
 import torch
-import torch.nn as nn
-import tifffile as tiff
-import h5py
 import os
 import datetime
-import pathlib as Path
-import numpy as np
-import polars as pl
 import torch
 import os
 from datetime import datetime
@@ -153,8 +147,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, device, l
     Returns:
         None
     """
-    #try:
-    if 1==1:
+    try:
         model.to(device)
         early_stopping = EarlyStopping(patience=patience, delta=delta, path=os.path.join(location, model_name+'best_model.pth'))
         writer = SummaryWriter(log_dir=location)
@@ -243,16 +236,16 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, device, l
         if log_with_mlflow:
             mlflow.end_run()
 
-    #except Exception as e:
-    #    print(f"An error occurred during training: {e}")
-    #    print(f"Closing logging")
-    #    writer.close()
-    #   if log_with_mlflow:
-    #        mlflow.end_run()
+    except Exception as e:
+        print(f"An error occurred during training: {e}")
+        print(f"Closing logging")
+        writer.close()
+        if log_with_mlflow:
+            mlflow.end_run()
 
     return train_losses, val_losses, train_accuracies, val_accuracies
 
-def eval_model(model, val_loader, criterion, device, num_classes, epoch):
+def eval_model(model, data_loader, criterion, device, num_classes, epoch):
     """
     Evaluates the model on the validation dataset.
 
@@ -272,8 +265,9 @@ def eval_model(model, val_loader, criterion, device, num_classes, epoch):
     total_val_loss, correct_val, total_val = 0, 0, 0
     all_val_predictions, all_val_labels = [], []
 
+
     with torch.no_grad():
-        for patches, labels in val_loader:
+        for patches, labels in data_loader:
             patches, labels = patches.to(device), labels.to(device)
             outputs = model(patches)
             loss = criterion(outputs, labels)
@@ -286,7 +280,7 @@ def eval_model(model, val_loader, criterion, device, num_classes, epoch):
             all_val_predictions.append(predicted)
             all_val_labels.append(labels)
 
-    avg_val_loss = total_val_loss / len(val_loader)
+    avg_val_loss = total_val_loss / len(data_loader)
     val_metrics = compute_metrics(
         torch.cat(all_val_predictions), torch.cat(all_val_labels), num_classes, device
     )

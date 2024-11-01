@@ -1,5 +1,3 @@
-import os
-
 import torch
 from torch.utils.data import Dataset
 import h5py
@@ -45,4 +43,9 @@ class MibiDataset(Dataset):
             #location = f['locations'][index]  # Load the location (if needed)
         patch= torch.tensor(patch, dtype=torch.float32)
         label = torch.tensor(label, dtype=torch.long)
+
+        if self.transform:
+            patch = self.transform(patch)
+        
         return patch,label
+    

@@ -4,7 +4,6 @@ import h5py
 from pathlib import Path
 import numpy as np
 import polars as pl
-import os
 
 #TODO switch to logging after initial tests
 
