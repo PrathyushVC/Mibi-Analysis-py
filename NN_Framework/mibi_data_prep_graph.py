@@ -3,7 +3,7 @@ import pandas as pd
 import polars as pl
 import torch
 import torch.nn as nn
-from torch_geometric.data import HeteroData
+from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from scipy.spatial import distance_matrix
 
@@ -11,17 +11,18 @@ from scipy.spatial import distance_matrix
 
 
 
-class CellTypeEmbedding(nn.Module):#Move to model module?
-    """
-    CellTypeEmbedding is a PyTorch neural network module that creates embeddings for cell types.
+class CellTypeEmbedding(nn.Module):  # Move to model module?
+    """A PyTorch module that creates embeddings for cell types.
+
+    This module converts categorical cell type labels into learned vector embeddings
+    that can be used as node features in a graph neural network.
 
     Args:
-        num_classes (int): The number of unique cell types.
-        embedding_dim (int): The dimension of the embedding space.
+        num_classes (int): Number of unique cell types to embed
+        embedding_dim (int): Dimension of the embedding vectors
 
-    Methods:
-        forward(x):
-            Computes the forward pass of the embedding layer, returning the embeddings for the input indices.
+    Returns:
+        torch.Tensor: Embedded vectors of shape (batch_size, embedding_dim)
     """
     def __init__(self, num_classes, embedding_dim):
         super().__init__()
@@ -30,33 +31,49 @@ class CellTypeEmbedding(nn.Module):#Move to model module?
     def forward(self, x):
         return self.embedding(x)
 
+
 def create_global_cell_mapping(df, cell_type_col):
-    """
-    Creates a global mapping of cell types to unique indices.
-
-    Args:
-        df (DataFrame): The input DataFrame containing cell type information.
-        cell_type_col (str): The name of the column in the DataFrame that contains cell type information.
-
-    Returns:
-        dict: A dictionary mapping each unique cell type to its corresponding index.
-    """
-
-    unique_cell_types = df[cell_type_col].unique().to_list() 
+    unique_cell_types = df[cell_type_col].unique().to_list()
     cell_type_to_index = {cell_type: idx for idx, cell_type in enumerate(unique_cell_types)}
     return cell_type_to_index
 
+
 def map_cell_types_to_indices(df, cell_type_col, cell_type_to_index):
-    """Map cell types to their corresponding indices."""
-    df=df.with_columns(pl.col(cell_type_col).replace(cell_type_to_index).cast(pl.Int32).alias(cell_type_col+'_int_map'))
+    df = df.with_columns(pl.col(cell_type_col).replace(cell_type_to_index).cast(pl.Int32).alias(cell_type_col + '_int_map'))
     return df
 
-def create_hetero_graph(df, expressions, cell_type_col=None, radius=50, 
-                        x_pos='centroid-0', y_pos='centroid-1', 
-                        fov_col='fov', group_col='Group', binarize=False, embedding_dim=4):
-    
-    graphs=[]
 
+def create_hetero_graph(df, expressions, cell_type_col=None, radius=50, x_pos='centroid-0', y_pos='centroid-1', fov_col='fov', group_col='Group', binarize=False, embedding_dim=4):
+    """Creates heterogeneous graphs from cell data.
+
+    Constructs graph representations of cell data where cells are nodes connected by edges
+    based on spatial proximity. Optionally includes cell type embeddings as node features.
+
+    Args:
+        df (polars.DataFrame): Input dataframe containing cell data
+        expressions (list): Column names of expression values to use as node features
+        cell_type_col (str, optional): Column name containing cell type labels. If provided,
+            cell type embeddings will be created. Defaults to None.
+        radius (float, optional): Maximum distance between cells to create an edge.
+            Defaults to 50.
+        x_pos (str, optional): Column name for x coordinates. Defaults to 'centroid-0'.
+        y_pos (str, optional): Column name for y coordinates. Defaults to 'centroid-1'.
+        fov_col (str, optional): Column name for field of view IDs. Defaults to 'fov'.
+        group_col (str, optional): Column name for group labels. Defaults to 'Group'.
+        binarize (bool, optional): Whether to binarize group labels. Defaults to False.
+        embedding_dim (int, optional): Dimension of cell type embeddings. Defaults to 4.
+
+    Returns:
+        list[torch_geometric.data.Data]: List of heterogeneous graphs, one per FOV.
+            Each graph contains:
+            - Node features (x): Expression values and optional cell type embeddings
+            - Edge indices: Pairs of connected cell indices
+            - Edge attributes: Distances between connected cells
+            - Graph label: Group classification label
+    """
+    graphs = []
+
+    # Initialize embedding only if cell_type_col is specified
     if cell_type_col:
         num_cell_types = df[cell_type_col].n_unique()
         cell_type_embedding = CellTypeEmbedding(num_cell_types, embedding_dim)
@@ -64,55 +81,44 @@ def create_hetero_graph(df, expressions, cell_type_col=None, radius=50,
     else:
         cell_type_embedding = None
 
-
-    #Determine how to do this in polars directly
-
-    for group_key,df_fov in df.group_by(fov_col):
-        
-        data = HeteroData()
-        try:
-           
-            data_to_numpy=df_fov.select(expressions).to_numpy()
-        except Exception as e:
-            raise TypeError(f"Columns contained non numerical types can not be converted to numpy:  {str(e)}")
-        
+    for group_key, df_fov in df.group_by(fov_col):
+        data = Data()
+        data_to_numpy = df_fov.select(expressions).to_numpy()
         node_features = torch.tensor(data_to_numpy, dtype=torch.float32)
         centroids = df_fov.select([x_pos, y_pos]).to_numpy()
 
         if cell_type_col:
-            # Map cell types to indices and generate embeddings
-
-            df_fov=map_cell_types_to_indices(df_fov, cell_type_col, cell_type_index)
-            cell_type_indices = torch.tensor(
-                df_fov[cell_type_col+'_int_map'].to_numpy(), 
-                dtype=torch.long
-            )#hard coded new column for debugging
+            df_fov = map_cell_types_to_indices(df_fov, cell_type_col, cell_type_index)
+            cell_type_indices = torch.tensor(df_fov[cell_type_col + '_int_map'].to_numpy(), dtype=torch.long)
             cell_embeddings = cell_type_embedding(cell_type_indices)
-
-            
             node_features = torch.cat([node_features, cell_embeddings], dim=1)
 
-        
         dist_matrix = distance_matrix(centroids, centroids)
         edge_index = np.array((dist_matrix < radius).nonzero())
         edge_index = torch.tensor(edge_index, dtype=torch.long).T
-        edge_index = edge_index[:, edge_index[0] != edge_index[1]]  # Remove self-loops
+        edge_index = edge_index[:, edge_index[0] != edge_index[1]]  # Remove loops
 
-        
-        data['cell'].x = node_features
-        data['cell', 'connected_to', 'cell'].edge_index = edge_index
+        data.x = node_features
+        data.edge_index = edge_index
         edge_attr = torch.tensor(dist_matrix[edge_index[0], edge_index[1]], dtype=torch.float).unsqueeze(-1)
-        data['cell', 'connected_to', 'cell'].edge_attr = edge_attr
+        data.edge_attr = edge_attr
 
-        
         group_value = df_fov[group_col][0]
         graph_label = _binarize_group(group_value) if binarize else _quad_group(group_value)
-        data['graph_label'] = torch.tensor([graph_label], dtype=torch.long)
+        data.y = torch.tensor([graph_label], dtype=torch.long)
+
+        print(f"Node features shape: {node_features.shape}")
+        print(f"Edge index shape: {edge_index.shape}")
+        print(f"Distance matrix shape: {dist_matrix.shape}")
+        print(f"Edge attributes shape: {edge_attr.shape}")
+
+
         graphs.append(data)
+        del edge_attr, edge_index, node_features, centroids, dist_matrix
     return graphs
 
 def _binarize_group(group_data):
-    """Binarize group labels."""
+    
     if str(group_data) in ['G1', 'G4']:
         return 1
     elif str(group_data) in ['G2', 'G3']:
@@ -121,7 +127,7 @@ def _binarize_group(group_data):
         raise ValueError("Unexpected group data")
 
 def _quad_group(group_data):
-    """Map groups to 4-class labels."""
+    
     group_mapping = {'G1': 0, 'G2': 1, 'G3': 2, 'G4': 3}
     if str(group_data) in group_mapping:
         return group_mapping[str(group_data)]
@@ -129,40 +135,46 @@ def _quad_group(group_data):
         raise ValueError("Unexpected group data")
 
 def dataset_overlap(df1, df2, col):
-    """Check for overlapping patient numbers."""
+   
     set1, set2 = set(df1[col].to_list()), set(df2[col].to_list())
     if set1 & set2:
         print("There is an overlap in patient numbers.")
     else:
         print("No overlap in patient numbers.")
 
-def print_heterodata_details(hetero_data):#GPTed
-    print("HeteroData Summary:")
-    print("\nNode Types and Features:")
-    for node_type in hetero_data.node_types:
-        num_nodes = hetero_data[node_type].x.size(0)  
-        features = hetero_data[node_type].x  
-        print(f"  - Node Type: {node_type} (Num nodes: {num_nodes})")
-        print(f"    Features (first 5 rows):\n{features[:5]}")  
+def print_data_details(data):
+    """Prints detailed information about a PyG Data object.
 
-    
-    print("\nEdge Types and Indices:")
-    for edge_type in hetero_data.edge_types:
-        src, _, dst = edge_type
-        edge_index = hetero_data[edge_type].edge_index 
-        num_edges = edge_index.size(1) 
-        print(f"  - Edge Type: {src} -> {dst} (Num edges: {num_edges})")
-        print(f"    Edge Index (first 5 pairs):\n{edge_index[:, :5]}")  
+    Args:
+        data (torch_geometric.data.Data): A PyG Data object containing graph information.
+            Expected to have node features (x), edge indices (edge_index), and optionally
+            edge attributes (edge_attr) and graph labels (graph_label).
 
-        
-        if 'edge_attr' in hetero_data[edge_type]:
-            edge_attr = hetero_data[edge_type].edge_attr
-            print(f"    Edge Attributes (first 5 rows):\n{edge_attr[:5]}") 
+    Prints:
+        - Number of nodes and first 5 rows of node features
+        - Number of edges and first 5 edge index pairs
+        - First 5 edge attributes (if present)
+        - Graph label (if present)
+    """
+    print("Graph Summary:")
+    print("\nNode Features:")
+    num_nodes = data.x.size(0)
+    features = data.x
+    print(f"  - Num nodes: {num_nodes}")
+    print(f"    Features (first 5 rows):\n{features[:5]}")
 
-    
-    if 'graph_label' in hetero_data:
-        graph_labels = hetero_data['graph_label']
-        print(f"\nGraph Labels:\n{graph_labels}")
+    print("\nEdge Index:")
+    num_edges = data.edge_index.size(1)
+    print(f"  - Num edges: {num_edges}")
+    print(f"    Edge Index (first 5 pairs):\n{data.edge_index[:, :5]}")
+
+    if 'edge_attr' in data:
+        edge_attr = data.edge_attr
+        print(f"    Edge Attributes (first 5 rows):\n{edge_attr[:5]}")
+
+    if 'graph_label' in data:
+        graph_label = data.graph_label
+        print(f"\nGraph Label:\n{graph_label}")
 
 
 def remapping(df, column_name):
@@ -210,24 +222,29 @@ def remapping(df, column_name):
 
 
 if __name__ == "__main__":
+    import torch
+    import torch_geometric
+    print(torch.__version__)
+    print(torch_geometric.__version__)
+    
     print("Running mibi_data_prep_graph dirrectly. Are you sure this is a good idea?")
     df = pl.read_csv(r"D:\MIBI-TOFF\Data_For_Amos\cleaned_expression_with_both_classification_prob_spatial_30_08_24.csv")
     expressions = ['CD45']
 
-    #df = df.filter(~pl.col('pred').is_in(['Unidentified', 'Immune']))#Remove confounding cells
+    df = df.filter(~pl.col('pred').is_in(['Unidentified', 'Immune']))#Remove confounding cells
 
-    #df=remapping(df=df, column_name='pred')#remap larger cell name list to smaller one 
+    df=remapping(df=df, column_name='pred')#remap larger cell name list to smaller one 
 
     
-    #graphs = create_hetero_graph(df, expressions, cell_type_col='remapped', radius=50)
-    #torch.save(graphs, r"D:\MIBI-TOFF\Scratch\fov_graphs.pt")
-    #print(f"Saved {len(graphs)} graphs.")
+    graphs = create_hetero_graph(df, expressions, cell_type_col='remapped', radius=50)
+    torch.save(graphs, r"D:\MIBI-TOFF\Scratch\fov_graphs.pt")
+    print(f"Saved {len(graphs)} graphs.")
 
     # Load and test DataLoader
     loaded_graphs = torch.load(r"D:\MIBI-TOFF\Scratch\fov_graphs.pt")
     print(f"loaded {len(loaded_graphs)} graphs.")
     for graph in loaded_graphs:
-        print_heterodata_details(graph)
+        print_data_details(graph)
         
     loader = DataLoader(loaded_graphs, batch_size=1, shuffle=True)
     print(loader)

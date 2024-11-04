@@ -1,7 +1,5 @@
 import torch
-import os
-import datetime
-import torch
+import torch.nn as nn
 import os
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
@@ -121,6 +119,11 @@ def compute_metrics(predictions, labels, num_classes, device):
     }
 
 
+def initialize_weights(model):
+    for m in model.modules():
+        if isinstance(m,nn.Conv2d):
+            nn.init.k
+
 def train_model(model, train_loader, val_loader, criterion, optimizer, device, location, 
     epochs=50, patience=25, delta=0.00000001, check_val_freq=5,num_classes=2,model_name='model', log_with_mlflow=True,mlflow_uri="http://127.0.0.1:5000"):
     """
@@ -173,6 +176,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, device, l
             all_train_predictions, all_train_labels = [], []
 
             for patches, labels in train_loader:
+
                 patches, labels = patches.to(device), labels.to(device)
 
                 optimizer.zero_grad()
