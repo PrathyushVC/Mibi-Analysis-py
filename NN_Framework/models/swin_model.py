@@ -58,6 +58,10 @@ class SwinTransformer(nn.Module):
         # Initialize current size based on patch embedding
         self.current_size = img_size // patch_size
 
+        print(f"Current size: {self.current_size}")
+        print(f"Number of features: {self.num_features}")
+        print(f"Patch size: {patch_size}")
+
         self.layers = nn.ModuleList()
         for i_layer in range(self.num_layers):
             layer = BasicSwinLayer(
@@ -78,21 +82,30 @@ class SwinTransformer(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool1d(1)
         self.fc = nn.Linear(self.num_features, num_classes)
         
-
+#TODO remove prints later
     def forward(self, x):
         x = self.patch_embed(x)  # B, E, S, S
-        #B, E, S, _ = x.shape
-        #print(f"B:{B}",f"E:{E}",f"S:{S}")
-        x = x.flatten(2).transpose(1, 2)  # B, S*S, E
 
-        for layer in self.layers:
+        print(f"After patch_embed: {x.shape}") 
+
+
+        for i,layer in enumerate(self.layers):
+            print(f"Layer {i}: {layer}") 
             x, self.current_size = layer(x, self.current_size)
+            
 
+        print(f"Before norm: {x.shape}")
         x = self.norm(x)
+        print(f"After norm: {x.shape}")
         x = x.transpose(1, 2)  # B, E, S*S
+        print(f"After transpose: {x.shape}")
         x = self.avgpool(x)  # B, E, 1
+        print(f"After pool: {x.shape}")
         x = torch.flatten(x, 1)  # B, E
+        print(f"After Flatten: {x.shape}")
         x = self.fc(x)  # B, num_classes
+        print(f"After FC: {x.shape}")
+        print(x)
 
         return x
 

@@ -43,7 +43,7 @@ def map_cell_types_to_indices(df, cell_type_col, cell_type_to_index):
     return df
 
 
-def create_hetero_graph(df, expressions, cell_type_col=None, radius=50, x_pos='centroid-0', y_pos='centroid-1', fov_col='fov', group_col='Group', binarize=False, embedding_dim=4):
+def create_graph(df, expressions, cell_type_col=None, radius=50, x_pos='centroid-0', y_pos='centroid-1', fov_col='fov', group_col='Group', binarize=False, embedding_dim=4):
     """Creates heterogeneous graphs from cell data.
 
     Constructs graph representations of cell data where cells are nodes connected by edges
@@ -236,7 +236,7 @@ if __name__ == "__main__":
     df=remapping(df=df, column_name='pred')#remap larger cell name list to smaller one 
 
     
-    graphs = create_hetero_graph(df, expressions, cell_type_col='remapped', radius=50)
+    graphs = create_graph(df, expressions, cell_type_col='remapped', radius=50)
     torch.save(graphs, r"D:\MIBI-TOFF\Scratch\fov_graphs.pt")
     print(f"Saved {len(graphs)} graphs.")
 
