@@ -1,11 +1,11 @@
+from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
+from scipy.spatial import distance_matrix
 import numpy as np
 import pandas as pd
 import polars as pl
 import torch
 import torch.nn as nn
-from torch_geometric.data import Data
-from torch_geometric.loader import DataLoader
-from scipy.spatial import distance_matrix
 
 #TODO edge values hard set to a single value and the model load through data loader
 
@@ -100,21 +100,33 @@ def create_graph(df, expressions, cell_type_col=None, radius=50, x_pos='centroid
 
         data.x = node_features
         data.edge_index = edge_index
-        edge_attr = torch.tensor(dist_matrix[edge_index[0], edge_index[1]], dtype=torch.float).unsqueeze(-1)
-        data.edge_attr = edge_attr
+        #edge_attr = torch.tensor(dist_matrix[edge_index[0], edge_index[1]], dtype=torch.float).unsqueeze(-1) shapes not aligning removed for initial tesitng
+        #data.edge_attr = edge_attr
 
         group_value = df_fov[group_col][0]
+        
         graph_label = _binarize_group(group_value) if binarize else _quad_group(group_value)
+        #print(f'Group value: {group_value}, Mapped label: {graph_label}')
         data.y = torch.tensor([graph_label], dtype=torch.long)
 
-        print(f"Node features shape: {node_features.shape}")
-        print(f"Edge index shape: {edge_index.shape}")
-        print(f"Distance matrix shape: {dist_matrix.shape}")
-        print(f"Edge attributes shape: {edge_attr.shape}")
+        #print(f"Node features shape: {node_features.shape}")
+        #print(f"Edge index shape: {edge_index.shape}")
+        #print(f"Distance matrix shape: {dist_matrix.shape}")
+        #print(f"Graph Label: {data.y}")
+        #print(f"Edge attributes shape: {edge_attr.shape}")
 
 
         graphs.append(data)
-        del edge_attr, edge_index, node_features, centroids, dist_matrix
+        if 'edge_index' in locals():
+            del edge_index
+        if 'node_features' in locals():
+            del node_features
+        if 'centroids' in locals():
+            del centroids
+        if 'dist_matrix' in locals():
+            del dist_matrix
+        if 'edge_attr' in locals():
+            del edge_attr
     return graphs
 
 def _binarize_group(group_data):
@@ -220,34 +232,14 @@ def remapping(df, column_name):
     return df
 
 
-
+#TODO move primary graph build and testing of dataloader to notebook 
+#TODO depublicate the repeated statements for train, val, test very messy
 if __name__ == "__main__":
-    import torch
-    import torch_geometric
     print(torch.__version__)
     print(torch_geometric.__version__)
     
-    print("Running mibi_data_prep_graph dirrectly. Are you sure this is a good idea?")
-    df = pl.read_csv(r"D:\MIBI-TOFF\Data_For_Amos\cleaned_expression_with_both_classification_prob_spatial_30_08_24.csv")
-    expressions = ['CD45']
-
-    df = df.filter(~pl.col('pred').is_in(['Unidentified', 'Immune']))#Remove confounding cells
-
-    df=remapping(df=df, column_name='pred')#remap larger cell name list to smaller one 
+    print(" If you are reading this you messed up.")
 
     
-    graphs = create_graph(df, expressions, cell_type_col='remapped', radius=50)
-    torch.save(graphs, r"D:\MIBI-TOFF\Scratch\fov_graphs.pt")
-    print(f"Saved {len(graphs)} graphs.")
 
-    # Load and test DataLoader
-    loaded_graphs = torch.load(r"D:\MIBI-TOFF\Scratch\fov_graphs.pt")
-    print(f"loaded {len(loaded_graphs)} graphs.")
-    for graph in loaded_graphs:
-        print_data_details(graph)
-        
-    loader = DataLoader(loaded_graphs, batch_size=1, shuffle=True)
-    print(loader)
-#
-    for batch in loader:
-        print(batch)
+
