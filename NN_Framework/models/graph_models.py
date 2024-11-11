@@ -20,7 +20,7 @@ class GraphConvClassifier(nn.Module):
         log_softmax (LogSoftmax): Final activation function to produce class probabilities.
     """
     
-    def __init__(self, input_dim, hidden_dim=128, num_classes=2):
+    def __init__(self, input_dim, hidden_dim=128, num_classes=2,dropout_rate=0.1):
         """Initializes the GraphClassifier model with two GCN layers, a fully connected
         layer, and an output layer.
 
@@ -30,10 +30,13 @@ class GraphConvClassifier(nn.Module):
             num_classes (int): Number of output classes for graph classification.
         """
         super(GraphConvClassifier, self).__init__()
+        
         self.conv1 = GCNConv(input_dim, hidden_dim)
         self.conv2 = GCNConv(hidden_dim, hidden_dim)
         self.relu = nn.ReLU()
         self.fc = nn.Linear(hidden_dim, num_classes)
+
+        self.dropout = nn.Dropout(p=dropout_rate)
 
     def forward(self, x, edge_index, batch):
         """Forward pass through the model to compute class probabilities for input graphs.
@@ -48,11 +51,15 @@ class GraphConvClassifier(nn.Module):
         """
         x = self.conv1(x, edge_index)
         x = self.relu(x)
+        x = self.dropout(x)
+
         x = self.conv2(x, edge_index)
         x = self.relu(x)
+        x = self.dropout(x)
+        
         x = global_mean_pool(x, batch)
         x = self.fc(x)
-        x = self.log_softmax(x)
+
         return x
 
 

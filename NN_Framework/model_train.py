@@ -7,8 +7,6 @@ from torchmetrics import Accuracy, F1Score, Precision, Recall, ConfusionMatrix
 import mlflow
 from mlflow.utils.logging_utils import disable_logging,enable_logging
 #TODO switch to logging after initial tests
-
-
 class EarlyStopping:
     """EarlyStopping is a utility class to stop training when a monitored metric has stopped improving.
 
@@ -66,7 +64,6 @@ class EarlyStopping:
         torch.save(model.state_dict(), self.path)
         if self.verbose:
             print(f"Model saved with improved validation loss: {self.best_loss:.4f}")
-
 
 def compute_metrics(predictions, labels, num_classes, device):
     """
@@ -295,11 +292,3 @@ def eval_model(model, data_loader, criterion, device, num_classes, epoch):
 
 
     return avg_val_loss, val_metrics
-
-def save_model(model, epoch, location, name):
-    """Saves the model to the specified location."""
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"{name}_epoch{epoch}_{timestamp}.pth"
-    filepath = os.path.join(location, filename)
-    torch.save(model.state_dict(), filepath)
-    print(f"Model saved to {filepath}")

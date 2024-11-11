@@ -33,7 +33,7 @@ class CellTypeEmbedding(nn.Module):  # Move to model module?
 def create_graph(df, expressions, cell_type_col=None, 
                  radius=50, x_pos='centroid-0', y_pos='centroid-1', 
                  fov_col='fov', group_col='Group', 
-                 binarize=False, embedding_dim=4):
+                 binarize=False,embedding_dim=4):
     """Creates heterogeneous graphs from cell data.
 
     Constructs graph representations of cell data where cells are nodes connected by edges
@@ -72,6 +72,7 @@ def create_graph(df, expressions, cell_type_col=None,
         cell_type_embedding = None
 
     for group_key, df_fov in df.group_by(fov_col):
+        #Parralization breaks due to limits of Pytorch
         data=_process_single_fov(df_fov, expressions, 
                                 cell_type_col, radius, 
                                 x_pos, y_pos, cell_type_embedding, 
@@ -80,16 +81,129 @@ def create_graph(df, expressions, cell_type_col=None,
         graphs.append(data)
     return graphs
 
-def _create_global_cell_mapping(df, cell_type_col):
-    unique_cell_types = df[cell_type_col].unique().to_list()
-    cell_type_to_index = {cell_type: idx for idx, cell_type in enumerate(unique_cell_types)}
-    return cell_type_to_index
+def create_graph_patches(df, expressions, stride=100, cell_type_col=None, 
+                 radius=50, x_pos='centroid-0', y_pos='centroid-1', 
+                 fov_col='fov', group_col='Group', 
+                 binarize=False,embedding_dim=4):
+    """Creates heterogeneous graphs from cell data.
+
+    Constructs graph representations of cell data where cells are nodes connected by edges
+    based on spatial proximity. Optionally includes cell type embeddings as node features.
+
+    Args:
+        df (polars.DataFrame): Input dataframe containing cell data
+        expressions (list): Column names of expression values to use as node features
+        cell_type_col (str, optional): Column name containing cell type labels. If provided,
+            cell type embeddings will be created. Defaults to None.
+        radius (float, optional): Maximum distance between cells to create an edge.
+            Defaults to 50.
+        x_pos (str, optional): Column name for x coordinates. Defaults to 'centroid-0'.
+        y_pos (str, optional): Column name for y coordinates. Defaults to 'centroid-1'.
+        fov_col (str, optional): Column name for field of view IDs. Defaults to 'fov'.
+        group_col (str, optional): Column name for group labels. Defaults to 'Group'.
+        binarize (bool, optional): Whether to binarize group labels. Defaults to False.
+        embedding_dim (int, optional): Dimension of cell type embeddings. Defaults to 4.
+
+    Returns:
+        list[torch_geometric.data.Data]: List of heterogeneous graphs, one per FOV.
+            Each graph contains:
+            - Node features (x): Expression values and optional cell type embeddings
+            - Edge indices: Pairs of connected cell indices
+            - Edge attributes: Distances between connected cells
+            - Graph label: Group classification label
+    """
+    graphs = []
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # Initialize embedding only if cell_type_col is specified
+    if cell_type_col:
+        num_cell_types = df[cell_type_col].n_unique()
+        cell_type_embedding = CellTypeEmbedding(num_cell_types, embedding_dim)
+        cell_type_index = _create_global_cell_mapping(df, cell_type_col)
+    else:
+        cell_type_embedding = None
+
+    for group_key, df_fov in df.group_by(fov_col):
+        #Parralization breaks due to limits of Pytorch
+        data=_process_single_fov_patches(df_fov, expressions, 
+                                cell_type_col,stride, radius, 
+                                x_pos, y_pos, cell_type_embedding, 
+                                cell_type_index,group_col, binarize,
+                                device)
+        graphs.extend(data)
+    return graphs
+
+#Works for single size
+def _process_single_fov_patches(df_fov, expressions, cell_type_col, 
+                                stride, x_pos, y_pos, cell_type_embedding, 
+                                cell_type_index, group_col, binarize, device):
+    """Process a Field of View (FOV) into multiple graphs by moving in patches using a Cartesian grid.
+    
+    Args:
+        stride (int): The stride for the grid movement (distance between patches).
+    
+    Returns:
+        list: A list of torch_geometric.data.Data objects for each patch.
+    """
+    graph = []
+    
 
 
-def _map_cell_types_to_indices(df, cell_type_col, cell_type_to_index):
-    df = df.with_columns(pl.col(cell_type_col).replace(cell_type_to_index).cast(pl.Int32).alias(cell_type_col + '_int_map'))
-    return df
+    x_min, x_max = df_fov.select(pl.col(x_pos).min()).to_numpy()[0][0], df_fov.select(pl.col(x_pos).max()).to_numpy()[0][0]
+    y_min, y_max = df_fov.select(pl.col(y_pos).min()).to_numpy()[0][0], df_fov.select(pl.col(y_pos).max()).to_numpy()[0][0]
 
+    if 1024-x_max<=0:
+        grid_max=1024
+    else:
+        grid_max=2048
+    
+
+    for x_start in range(0, grid_max, stride):
+        for y_start in range(0, grid_max, stride):
+            x_end = x_start + stride
+            y_end = y_start + stride
+
+            patch_df=df_fov.filter(
+                    (pl.col(x_pos) >= x_start) & 
+                    (pl.col(x_pos) < x_end) & 
+                    (pl.col(y_pos) >= y_start) & 
+                    (pl.col(y_pos) < y_end))
+            
+            if patch_df.shape[0] == 0:
+                continue
+
+            data = Data()
+
+            patch_df_numpy = patch_df.select(expressions).to_numpy()
+            node_features = torch.tensor(patch_df_numpy, dtype=torch.float32)
+
+            centroids = patch_df.select([x_pos, y_pos]).to_numpy()
+            dist_matrix = distance_matrix(centroids, centroids)
+            edge_index = np.array((dist_matrix < stride).nonzero())
+            edge_index = torch.tensor(edge_index, dtype=torch.long).to(device)
+            
+            non_self_loops = torch.where(edge_index[0] != edge_index[1])[0]
+            edge_index = edge_index[:, non_self_loops]  # Keep only non-self loops
+            
+            data.edge_index = edge_index
+
+            if cell_type_col:
+                patch_df = _map_cell_types_to_indices(patch_df, cell_type_col, cell_type_index)
+                cell_type_indices = torch.tensor(patch_df[cell_type_col + '_int_map'].to_numpy(), dtype=torch.long)
+                cell_embeddings = cell_type_embedding(cell_type_indices)
+                node_features = torch.cat([node_features, cell_embeddings], dim=1)
+
+            data.x = node_features
+
+            group_value = patch_df.select(group_col).to_numpy().flatten()[0]
+            graph_label = _binarize_group(group_value) if binarize else _quad_group(group_value)
+            data.y = torch.tensor([graph_label], dtype=torch.long)
+
+            graph.append(data)
+
+    return graph
+
+
+#Breaking due to size var
 def _process_single_fov(df_fov, expressions, cell_type_col, 
                        radius, x_pos, y_pos, cell_type_embedding, 
                        cell_type_index,group_col, binarize, device):
@@ -118,8 +232,11 @@ def _process_single_fov(df_fov, expressions, cell_type_col,
     edge_index = np.array((dist_matrix < radius).nonzero())
     
     edge_index = torch.tensor(edge_index, dtype=torch.long).to(device)
-    non_self_loops = torch.where(edge_index[0] != edge_index[1])[0]
-    edge_index = edge_index[:, non_self_loops]
+    non_self_loops = torch.where(edge_index[0] != edge_index[1])[0] # Find edges that point to themselves.
+    edge_index = edge_index[:, non_self_loops] # Cut down the list to only not self pointing edges. 
+    # Above line appears to cause significant slow down across the entire dataset. 
+    # Possibly need to parallize this single step. Works for now
+
 
     if cell_type_col:
         df_fov = _map_cell_types_to_indices(df_fov, cell_type_col, cell_type_index)
@@ -139,6 +256,18 @@ def _process_single_fov(df_fov, expressions, cell_type_col,
     
     return data
 
+
+
+
+def _create_global_cell_mapping(df, cell_type_col):
+    unique_cell_types = df[cell_type_col].unique().to_list()
+    cell_type_to_index = {cell_type: idx for idx, cell_type in enumerate(unique_cell_types)}
+    return cell_type_to_index
+
+
+def _map_cell_types_to_indices(df, cell_type_col, cell_type_to_index):
+    df = df.with_columns(pl.col(cell_type_col).replace(cell_type_to_index).cast(pl.Int32).alias(cell_type_col + '_int_map'))
+    return df
 
 def _binarize_group(group_data):
     
@@ -200,7 +329,7 @@ def print_data_details(data):
         print(f"\nGraph Label:\n{graph_label}")
 
 
-def _remapping(df, column_name):
+def remapping(df, column_name):
     # Define the mapping as a dictionary
     group_mapping = {
         'CD4 T cell': 'CD4_T_cell',

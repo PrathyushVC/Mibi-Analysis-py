@@ -28,7 +28,7 @@ class EarlyStopping:
         early_stop (bool): Flag indicating whether to stop training.
     simplified version of https://github.com/pytorch/ignite/blob/master/ignite/handlers/early_stopping.py
     """
-    def __init__(self, patience=5, delta=0.01, verbose=True,path='best_model.pth'):
+    def __init__(self, patience=25, delta=0.01, verbose=True,path='best_model.pth'):
         """Initializes the EarlyStopping object.
 
         Args:
@@ -179,6 +179,8 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, device, l
             batch = batch.to(device)
             optimizer.zero_grad()
             outputs = model(batch.x, batch.edge_index, batch.batch)
+
+
             loss = criterion(outputs, batch.y)
             loss.backward()
             optimizer.step()
@@ -266,12 +268,3 @@ def eval_model(model, data_loader, criterion, device, num_classes, epoch):
 
     print(f"Epoch {epoch}, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_metrics['accuracy']:.2f}%")
     return avg_val_loss, val_metrics
-
-
-def save_model(model, epoch, location, name):
-    """Saves the model to the specified location."""
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"{name}_epoch{epoch}_{timestamp}.pth"
-    filepath = os.path.join(location, filename)
-    torch.save(model.state_dict(), filepath)
-    print(f"Model saved to {filepath}")

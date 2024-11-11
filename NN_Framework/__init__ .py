@@ -1,6 +1,6 @@
 from .mibi_dataset import MibiDataset  
 from .models import ViTClassifier, DenseNet, SwinTransformer
-from .model_train import train_model, eval_model, compute_metrics, save_model  # Import utility functions
+from .model_train import train_model, eval_model, compute_metrics # Import utility functions
 from .mibi_data_prep import dataset_overlap, fovs_to_hdf5
 from .multichannel_transforms import RandomHorizontalFlip3D, RandomVerticalFlip3D, RandomRotation3D
 from .graph_model_train import *
