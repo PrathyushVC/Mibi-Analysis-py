@@ -1,14 +1,16 @@
-from torch_geometric.data import Data
-from torch_geometric.loader import DataLoader
-from scipy.spatial import distance_matrix
+import multiprocessing
 import numpy as np
 import pandas as pd
 import polars as pl
+from scipy.spatial import distance_matrix
 import torch
 import torch.nn as nn
+from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
+
 
 #TODO edge values hard set to a single value and the model load through data loader
-
+#TODO clean up print statements
 
 
 class CellTypeEmbedding(nn.Module):  # Move to model module?
@@ -43,6 +45,67 @@ def map_cell_types_to_indices(df, cell_type_col, cell_type_to_index):
     return df
 
 
+
+def process_fov(df_fov, expressions, cell_type_col, radius, x_pos, y_pos, cell_type_embedding, cell_type_index,group_col, binarize, device):
+    """
+    Takes cell data from a single field of view (FOV) and constructs a graph where cells are nodes
+    and edges connect nearby cells based on spatial proximity. Node features include expression values
+    and optionally cell type embeddings.
+
+    Args:
+        df_fov (polars.DataFrame): DataFrame containing data for a single FOV
+        expressions (list): Column names of expression values to use as node features
+        cell_type_col (str): Column name containing cell type labels
+        radius (float): Maximum distance between cells to create an edge
+        x_pos (str): Column name for x coordinates
+        y_pos (str): Column name for y coordinates 
+        cell_type_embedding (nn.Embedding): Embedding layer for cell types
+        cell_type_index (dict): Mapping from cell types to indices
+        embedding_dim (int): Dimension of cell type embeddings
+        device (torch.device): Device to create tensors on
+
+    Returns:
+        torch_geometric.data.Data: Graph representation of the FOV containing:
+            - x: Node features (expression values + optional cell type embeddings)
+            - edge_index: Graph connectivity in COO format
+            - y: Graph label
+    """
+    data = Data()
+    
+
+    data_to_numpy = df_fov.select(expressions).to_numpy()
+    node_features = torch.tensor(data_to_numpy, dtype=torch.float32)
+    centroids = df_fov.select([x_pos, y_pos]).to_numpy()
+
+
+    if cell_type_col:
+        df_fov = map_cell_types_to_indices(df_fov, cell_type_col, cell_type_index)
+        cell_type_indices = torch.tensor(df_fov[cell_type_col + '_int_map'].to_numpy(), dtype=torch.long)
+        cell_embeddings = cell_type_embedding(cell_type_indices)
+        node_features = torch.cat([node_features, cell_embeddings], dim=1)
+
+
+    dist_matrix = distance_matrix(centroids, centroids)
+    edge_index = np.array((dist_matrix < radius).nonzero())
+    
+    edge_index = torch.tensor(edge_index, dtype=torch.long).to(device)
+    non_self_loops = torch.where(edge_index[0] != edge_index[1])[0]
+    edge_index = edge_index[:, non_self_loops]
+
+    data.x = node_features
+    data.edge_index = edge_index
+    
+    # edge_attr = torch.tensor(dist_matrix[edge_index[0], edge_index[1]], dtype=torch.float).unsqueeze(-1)
+    # data.edge_attr = edge_attr
+
+    group_value = df_fov[group_col][0]
+    graph_label = _binarize_group(group_value) if binarize else _quad_group(group_value)
+    data.y = torch.tensor([graph_label], dtype=torch.long)
+    
+    
+    return data
+
+
 def create_graph(df, expressions, cell_type_col=None, radius=50, x_pos='centroid-0', y_pos='centroid-1', fov_col='fov', group_col='Group', binarize=False, embedding_dim=4):
     """Creates heterogeneous graphs from cell data.
 
@@ -72,7 +135,8 @@ def create_graph(df, expressions, cell_type_col=None, radius=50, x_pos='centroid
             - Graph label: Group classification label
     """
     graphs = []
-
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+   
     # Initialize embedding only if cell_type_col is specified
     if cell_type_col:
         num_cell_types = df[cell_type_col].n_unique()
@@ -81,52 +145,22 @@ def create_graph(df, expressions, cell_type_col=None, radius=50, x_pos='centroid
     else:
         cell_type_embedding = None
 
-    for group_key, df_fov in df.group_by(fov_col):
-        data = Data()
-        data_to_numpy = df_fov.select(expressions).to_numpy()
-        node_features = torch.tensor(data_to_numpy, dtype=torch.float32)
-        centroids = df_fov.select([x_pos, y_pos]).to_numpy()
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        results = []
+        for group_key, df_fov in df.groupby(fov_col):
+            
+            apply_async_args = (df_fov,expressions, 
+                cell_type_col, radius, x_pos, y_pos, 
+                cell_type_embedding, cell_type_index, 
+                embedding_dim, group_col, binarize, device)
+            
+            
+            result = pool.apply_async(process_fov, args=apply_async_args)
+            results.append(result)
 
-        if cell_type_col:
-            df_fov = map_cell_types_to_indices(df_fov, cell_type_col, cell_type_index)
-            cell_type_indices = torch.tensor(df_fov[cell_type_col + '_int_map'].to_numpy(), dtype=torch.long)
-            cell_embeddings = cell_type_embedding(cell_type_indices)
-            node_features = torch.cat([node_features, cell_embeddings], dim=1)
+        for result in results:
+            graphs.append(result.get())
 
-        dist_matrix = distance_matrix(centroids, centroids)
-        edge_index = np.array((dist_matrix < radius).nonzero())
-        edge_index = torch.tensor(edge_index, dtype=torch.long).T
-        edge_index = edge_index[:, edge_index[0] != edge_index[1]]  # Remove loops
-
-        data.x = node_features
-        data.edge_index = edge_index
-        #edge_attr = torch.tensor(dist_matrix[edge_index[0], edge_index[1]], dtype=torch.float).unsqueeze(-1) shapes not aligning removed for initial tesitng
-        #data.edge_attr = edge_attr
-
-        group_value = df_fov[group_col][0]
-        
-        graph_label = _binarize_group(group_value) if binarize else _quad_group(group_value)
-        #print(f'Group value: {group_value}, Mapped label: {graph_label}')
-        data.y = torch.tensor([graph_label], dtype=torch.long)
-
-        #print(f"Node features shape: {node_features.shape}")
-        #print(f"Edge index shape: {edge_index.shape}")
-        #print(f"Distance matrix shape: {dist_matrix.shape}")
-        #print(f"Graph Label: {data.y}")
-        #print(f"Edge attributes shape: {edge_attr.shape}")
-
-
-        graphs.append(data)
-        if 'edge_index' in locals():
-            del edge_index
-        if 'node_features' in locals():
-            del node_features
-        if 'centroids' in locals():
-            del centroids
-        if 'dist_matrix' in locals():
-            del dist_matrix
-        if 'edge_attr' in locals():
-            del edge_attr
     return graphs
 
 def _binarize_group(group_data):
@@ -239,6 +273,9 @@ if __name__ == "__main__":
     print(torch_geometric.__version__)
     
     print(" If you are reading this you messed up.")
+
+
+
 
     
 

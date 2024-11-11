@@ -45,7 +45,7 @@ def fovs_to_hdf5(root_dir,df,hdf5_path, patch_size_x=128, patch_size_y=128,prefi
         for image_file in tif_path.iterdir():
             if expressions and image_file.name not in expressions:
                 #print(f"{fov_path}\{image_file} is not in approved expressions")
-                continue  # Skip if file is not in the expressions list
+                continue  # skip if file is not in the expressions list
             
             if image_file.suffix in ['.tif', '.tiff'] and \
                'segmentation' not in image_file.name and \
@@ -53,7 +53,7 @@ def fovs_to_hdf5(root_dir,df,hdf5_path, patch_size_x=128, patch_size_y=128,prefi
                 sublist.append(str(image_file))
 
         if sublist:#If all files share the same set of paths this will have a normalized order. 
-            sublist.sort()  # Normalize the order of images
+            sublist.sort()  # normalize the order of images
             labels.append(binarized_data)
             image_paths.append(sublist)
 
