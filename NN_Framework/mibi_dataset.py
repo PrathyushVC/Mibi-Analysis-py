@@ -1,6 +1,8 @@
 import torch
-from torch.utils.data import Dataset
 import h5py
+from torch.utils.data import Dataset
+import torch_geometric.data as tgd
+import torch_geometric.transforms as tgt
 
 class MibiDataset(Dataset):
     """
@@ -49,3 +51,28 @@ class MibiDataset(Dataset):
         
         return patch,label
     
+class AugmentedGraphDataset(tgd.Dataset):
+    def __init__(self, graphs, augments=[]):
+        """
+        Custom graph dataset that applies a list of augmentations on a list of input graphs.
+        
+        Args:
+            graphs (list): List of PyG Data objects representing individual graphs.
+            augments (list): List of augmentation functions to apply.
+        """
+        super(AugmentedGraphDataset).__init__()
+        self.graphs = graphs  # Store the list of graphs
+        self.augments = augments
+
+    def len(self):
+        return len(self.graphs)
+
+    def get(self, idx):
+        # Retrieve the graph at the specified index
+        data = self.graphs[idx].clone()  # Clone to prevent modifying the original graph
+
+        # Apply each augmentation in the list
+        for augment in self.augments:
+            data = augment(data)
+        
+        return data

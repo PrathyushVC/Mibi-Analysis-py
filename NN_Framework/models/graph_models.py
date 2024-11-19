@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch_geometric.nn import GCNConv, global_mean_pool
+from torch_geometric.nn import GCNConv, InstanceNorm, global_mean_pool
 from torch_geometric.data import Data, DataLoader
 
 class GraphConvClassifier(nn.Module):
@@ -32,11 +32,15 @@ class GraphConvClassifier(nn.Module):
         super(GraphConvClassifier, self).__init__()
         
         self.conv1 = GCNConv(input_dim, hidden_dim)
+        self.norm1 = InstanceNorm(hidden_dim)
         self.conv2 = GCNConv(hidden_dim, hidden_dim)
-        self.relu = nn.ReLU()
+        self.norm2 = InstanceNorm(hidden_dim)
+
+
         self.fc = nn.Linear(hidden_dim, num_classes)
 
         self.dropout = nn.Dropout(p=dropout_rate)
+        self.relu = nn.ReLU()
 
     def forward(self, x, edge_index, batch):
         """Forward pass through the model to compute class probabilities for input graphs.
@@ -50,13 +54,15 @@ class GraphConvClassifier(nn.Module):
             Tensor: Logarithmic probabilities for each graph's class, with shape [num_graphs, output_dim].
         """
         x = self.conv1(x, edge_index)
+        x = self.norm1(x)
         x = self.relu(x)
         x = self.dropout(x)
 
         x = self.conv2(x, edge_index)
+        x = self.norm2(x)
         x = self.relu(x)
         x = self.dropout(x)
-        
+
         x = global_mean_pool(x, batch)
         x = self.fc(x)
 

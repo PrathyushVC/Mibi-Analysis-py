@@ -29,6 +29,37 @@ class CellTypeEmbedding(nn.Module):  # Move to model module?
 
     def forward(self, x):
         return self.embedding(x)
+    
+    
+##########################################################################################
+    
+def one_hot_encode_to_array(df, target_col):
+    """
+    One-hot encodes the target column in a Pandas or Polars DataFrame 
+    and returns a NumPy array.
+    
+    Args:
+        df: Pandas or Polars DataFrame.
+        target_col: Column name to one-hot encode.
+        
+    Returns:
+        A NumPy array representing the one-hot encoded values.
+    """
+    if isinstance(df, pd.DataFrame):  # For Pandas
+        one_hot_matrix = pd.get_dummies(df[target_col], prefix=target_col).to_numpy()
+        print(one_hot_matrix)
+    elif isinstance(df, pl.DataFrame):  # For Polars
+        unique_values = df[target_col].unique().to_list()  # Get unique categories
+        one_hot_matrix = np.column_stack([
+            (df[target_col] == val).to_numpy().astype(int) for val in unique_values])
+        print(unique_values)
+        print(one_hot_matrix)
+    else:
+        raise ValueError("Input DataFrame must be either a Pandas or Polars DataFrame.")
+    return torch.tensor(one_hot_matrix,dtype=torch.float32)
+
+
+############################################################################################################################
 
 def create_graph(df, expressions, cell_type_col=None, 
                  radius=50, x_pos='centroid-0', y_pos='centroid-1', 
@@ -66,7 +97,11 @@ def create_graph(df, expressions, cell_type_col=None,
     # Initialize embedding only if cell_type_col is specified
     if cell_type_col:
         num_cell_types = df[cell_type_col].n_unique()
-        cell_type_embedding = CellTypeEmbedding(num_cell_types, embedding_dim)
+        if num_cell_types<=4:
+
+            
+        else:
+            cell_type_embedding = CellTypeEmbedding(num_cell_types, embedding_dim)
         cell_type_index = _create_global_cell_mapping(df, cell_type_col)
     else:
         cell_type_embedding = None
@@ -80,6 +115,59 @@ def create_graph(df, expressions, cell_type_col=None,
                                 device)
         graphs.append(data)
     return graphs
+
+#Breaking due to size var
+def _process_single_fov(df_fov, expressions, cell_type_col, 
+                       radius, x_pos, y_pos, cell_type_embedding, 
+                       cell_type_index,group_col, binarize, device):
+    """Process a single FOV to create a graph representation.
+
+    Takes cell data from a single field of view (FOV) and constructs a graph where cells are nodes
+    and edges connect nearby cells based on spatial proximity. Node features include expression values
+    and optionally cell type embeddings.
+
+    Args:
+        refer to create graph
+
+    Returns:
+        torch_geometric.data.Data: Graph representation of the FOV containing:
+            - x: Node features (expression values + optional cell type embeddings)
+            - edge_index: Graph connectivity in COO format
+            - y: Graph label
+    """
+    data = Data()
+
+    data_to_numpy = df_fov.select(expressions).to_numpy()
+    node_features = torch.tensor(data_to_numpy, dtype=torch.float32)
+
+    centroids = df_fov.select([x_pos, y_pos]).to_numpy()
+    dist_matrix = distance_matrix(centroids, centroids)
+    edge_index = np.array((dist_matrix < radius).nonzero())
+    
+    edge_index = torch.tensor(edge_index, dtype=torch.long).to(device)
+    non_self_loops = torch.where(edge_index[0] != edge_index[1])[0] # Find edges that point to themselves.
+    edge_index = edge_index[:, non_self_loops] # Cut down the list to only not self pointing edges. 
+
+
+    if cell_type_col:
+        df_fov = _map_cell_types_to_indices(df_fov, cell_type_col, cell_type_index)
+        cell_type_indices = torch.tensor(df_fov[cell_type_col + '_int_map'].to_numpy(), dtype=torch.long)
+        cell_embeddings = cell_type_embedding(cell_type_indices)
+        node_features = torch.cat([node_features, cell_embeddings], dim=1)
+
+    data.x = node_features
+    data.edge_index = edge_index
+    
+    # edge_attr = torch.tensor(dist_matrix[edge_index[0], edge_index[1]], dtype=torch.float).unsqueeze(-1)
+    # data.edge_attr = edge_attr
+
+    group_value = df_fov[group_col][0]
+    graph_label = _binarize_group(group_value) if binarize else _quad_group(group_value)
+    data.y = torch.tensor([graph_label], dtype=torch.long)
+    
+    return data
+
+################################################################################################################################
 
 def create_graph_patches(df, expressions, stride=100, cell_type_col=None, 
                  radius=50, x_pos='centroid-0', y_pos='centroid-1', 
@@ -122,6 +210,8 @@ def create_graph_patches(df, expressions, stride=100, cell_type_col=None,
     else:
         cell_type_embedding = None
 
+
+    fov_list=[]
     for group_key, df_fov in df.group_by(fov_col):
         #Parralization breaks due to limits of Pytorch
         data=_process_single_fov_patches(df_fov, expressions, 
@@ -129,12 +219,13 @@ def create_graph_patches(df, expressions, stride=100, cell_type_col=None,
                                 x_pos, y_pos, cell_type_embedding, 
                                 cell_type_index,group_col, binarize,
                                 device)
+        fov_list.append(group_key[0])
         graphs.extend(data)
-    return graphs
+    return graphs,fov_list
 
 #Works for single size
 def _process_single_fov_patches(df_fov, expressions, cell_type_col, 
-                                stride, x_pos, y_pos, cell_type_embedding, 
+                                stride,radius, x_pos, y_pos, cell_type_embedding, 
                                 cell_type_index, group_col, binarize, device):
     """Process a Field of View (FOV) into multiple graphs by moving in patches using a Cartesian grid.
     
@@ -151,7 +242,7 @@ def _process_single_fov_patches(df_fov, expressions, cell_type_col,
     x_min, x_max = df_fov.select(pl.col(x_pos).min()).to_numpy()[0][0], df_fov.select(pl.col(x_pos).max()).to_numpy()[0][0]
     y_min, y_max = df_fov.select(pl.col(y_pos).min()).to_numpy()[0][0], df_fov.select(pl.col(y_pos).max()).to_numpy()[0][0]
 
-    if 1024-x_max<=0:
+    if x_max-1024<=0:
         grid_max=1024
     else:
         grid_max=2048
@@ -168,7 +259,8 @@ def _process_single_fov_patches(df_fov, expressions, cell_type_col,
                     (pl.col(y_pos) >= y_start) & 
                     (pl.col(y_pos) < y_end))
             
-            if patch_df.shape[0] == 0:
+            if patch_df.shape[0] < 10:# Removing patches with to few cells
+                print(f"Skipped Region: [{x_start}, {x_end}, {y_start}, {y_end}]")
                 continue
 
             data = Data()
@@ -178,7 +270,7 @@ def _process_single_fov_patches(df_fov, expressions, cell_type_col,
 
             centroids = patch_df.select([x_pos, y_pos]).to_numpy()
             dist_matrix = distance_matrix(centroids, centroids)
-            edge_index = np.array((dist_matrix < stride).nonzero())
+            edge_index = np.array((dist_matrix < radius).nonzero())
             edge_index = torch.tensor(edge_index, dtype=torch.long).to(device)
             
             non_self_loops = torch.where(edge_index[0] != edge_index[1])[0]
@@ -197,68 +289,14 @@ def _process_single_fov_patches(df_fov, expressions, cell_type_col,
             group_value = patch_df.select(group_col).to_numpy().flatten()[0]
             graph_label = _binarize_group(group_value) if binarize else _quad_group(group_value)
             data.y = torch.tensor([graph_label], dtype=torch.long)
+            data.x_range = torch.tensor([x_start, x_end], dtype=torch.long)
+            data.y_range = torch.tensor([y_start, y_end], dtype=torch.long)
 
             graph.append(data)
 
     return graph
 
-
-#Breaking due to size var
-def _process_single_fov(df_fov, expressions, cell_type_col, 
-                       radius, x_pos, y_pos, cell_type_embedding, 
-                       cell_type_index,group_col, binarize, device):
-    """Process a single FOV to create a graph representation.
-
-    Takes cell data from a single field of view (FOV) and constructs a graph where cells are nodes
-    and edges connect nearby cells based on spatial proximity. Node features include expression values
-    and optionally cell type embeddings.
-
-    Args:
-        refer to create graph
-
-    Returns:
-        torch_geometric.data.Data: Graph representation of the FOV containing:
-            - x: Node features (expression values + optional cell type embeddings)
-            - edge_index: Graph connectivity in COO format
-            - y: Graph label
-    """
-    data = Data()
-
-    data_to_numpy = df_fov.select(expressions).to_numpy()
-    node_features = torch.tensor(data_to_numpy, dtype=torch.float32)
-
-    centroids = df_fov.select([x_pos, y_pos]).to_numpy()
-    dist_matrix = distance_matrix(centroids, centroids)
-    edge_index = np.array((dist_matrix < radius).nonzero())
-    
-    edge_index = torch.tensor(edge_index, dtype=torch.long).to(device)
-    non_self_loops = torch.where(edge_index[0] != edge_index[1])[0] # Find edges that point to themselves.
-    edge_index = edge_index[:, non_self_loops] # Cut down the list to only not self pointing edges. 
-    # Above line appears to cause significant slow down across the entire dataset. 
-    # Possibly need to parallize this single step. Works for now
-
-
-    if cell_type_col:
-        df_fov = _map_cell_types_to_indices(df_fov, cell_type_col, cell_type_index)
-        cell_type_indices = torch.tensor(df_fov[cell_type_col + '_int_map'].to_numpy(), dtype=torch.long)
-        cell_embeddings = cell_type_embedding(cell_type_indices)
-        node_features = torch.cat([node_features, cell_embeddings], dim=1)
-
-    data.x = node_features
-    data.edge_index = edge_index
-    
-    # edge_attr = torch.tensor(dist_matrix[edge_index[0], edge_index[1]], dtype=torch.float).unsqueeze(-1)
-    # data.edge_attr = edge_attr
-
-    group_value = df_fov[group_col][0]
-    graph_label = _binarize_group(group_value) if binarize else _quad_group(group_value)
-    data.y = torch.tensor([graph_label], dtype=torch.long)
-    
-    return data
-
-
-
-
+##########################################################################################################################################
 def _create_global_cell_mapping(df, cell_type_col):
     unique_cell_types = df[cell_type_col].unique().to_list()
     cell_type_to_index = {cell_type: idx for idx, cell_type in enumerate(unique_cell_types)}
@@ -369,6 +407,48 @@ def remapping(df, column_name):
     else:
         raise ValueError("Input DataFrame must be either a Pandas or Polars DataFrame.")
 
+    return df
+
+def remapping_simplified(df, column_name):
+    # Define the simplified groups as a dictionary
+    simplified_mapping = {
+        'CD4 T cell': 'Lymphocytes',
+        'Memory_CD4_T_Cells': 'Lymphocytes',
+        'Tfh': 'Lymphocytes',
+        'CD8 T cell': 'Lymphocytes',
+        'CD4 Treg': 'Lymphocytes',
+        'CD3 only': 'Lymphocytes',
+        'B cell': 'Lymphocytes',
+        'Follicular_Germinal_B_Cell': 'Lymphocytes',
+        'CD20_neg_B_cells': 'Lymphocytes',
+        'NK cell': 'Lymphocytes',
+        'CD4 APC': 'Myeloid_Cells',
+        'DC sign Mac': 'Myeloid_Cells',
+        'CD14_CD11c_DCs': 'Myeloid_Cells',
+        'CD11_CD11c_DCsign_DCs': 'Myeloid_Cells',
+        'DCs': 'Myeloid_Cells',
+        'CD206_Mac': 'Myeloid_Cells',
+        'CD68_Mac': 'Myeloid_Cells',
+        'Mac': 'Myeloid_Cells',
+        'Mono_CD14_DR': 'Myeloid_Cells',
+        'Neutrophil': 'Myeloid_Cells',
+        'Collagen_sma': 'Structural_Cells',
+        'SMA': 'Structural_Cells',
+        'Collagen': 'Structural_Cells',
+        'blood vessels': 'Structural_Cells',
+        'tumor': 'Tumor',
+        'Immune': 'Other',
+        'Unidentified': 'Other',
+        'Hevs': 'Other',
+    }
+    
+    if isinstance(df, pd.DataFrame):  # For Pandas DataFrame
+        df['remapped'] = df[column_name].map(simplified_mapping).fillna('Other')
+    elif isinstance(df, pl.DataFrame):  # For Polars DataFrame
+        df = df.with_columns(pl.col(column_name).replace(simplified_mapping).alias('remapped'))
+    else:
+        raise ValueError("Input DataFrame must be either a Pandas or Polars DataFrame.")
+    
     return df
 
 if __name__ == "__main__":

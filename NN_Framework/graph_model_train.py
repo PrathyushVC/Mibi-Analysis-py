@@ -191,11 +191,9 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, device, l
             all_train_labels.append(batch.y)
 
         avg_train_loss = total_train_loss / len(train_loader)
-        train_metrics = compute_metrics(
-            torch.cat(all_train_predictions), torch.cat(all_train_labels), num_classes, device
-        )
+        train_metrics = compute_metrics(torch.cat(all_train_predictions), torch.cat(all_train_labels), num_classes, device)
 
-        print(f"Epoch {epoch}, Train Loss: {avg_train_loss:.4f}, Train Acc: {train_metrics['accuracy']:.2f}%")
+        print(f"Epoch {epoch}, Train Loss: {avg_train_loss:.4f}, Train Acc: {train_metrics['accuracy']:.2f}%, Train F1: {train_metrics['f1_score']}")
         writer.add_scalar("Loss/train", avg_train_loss, epoch)
         writer.add_scalar("Accuracy/train", train_metrics["accuracy"], epoch)
 
@@ -266,5 +264,5 @@ def eval_model(model, data_loader, criterion, device, num_classes, epoch):
         torch.cat(all_val_predictions), torch.cat(all_val_labels), num_classes, device
     )
 
-    print(f"Epoch {epoch}, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_metrics['accuracy']:.2f}%")
+    print(f"Epoch {epoch}, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_metrics['accuracy']:.2f}%, Val F1: {val_metrics['f1_score']}")
     return avg_val_loss, val_metrics
