@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import os
 from datetime import datetime
 
-from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
+from torch_geometric.utils import dropout_adj, dropout_node
 
 
 from torch.utils.tensorboard import SummaryWriter
@@ -12,9 +13,12 @@ from torchmetrics import Accuracy, F1Score, Precision, Recall, ConfusionMatrix
 
 import mlflow
 from mlflow.utils.logging_utils import disable_logging,enable_logging
+
 #TODO switch to logging after initial tests
 #TODO move earlystopping and stats calc to utils instead of haveing two copies in training 
-
+#TODO Convert these into hyperparameters that we can add to the dataloader instead of doing as part of the training loop
+#TODO Update Docstrings
+#            
 class EarlyStopping:
     """EarlyStopping is a utility class to stop training when a monitored metric has stopped improving.
 
@@ -176,11 +180,21 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, device, l
         all_train_predictions, all_train_labels = [], []
 
         for batch in train_loader:
+            
             batch = batch.to(device)
-            optimizer.zero_grad()
+            
+            # EDGE Dropping
+            # Drop edges with probability 0.2(hard coded) for the current batch
+            batch.edge_index, _ = dropout_adj(batch.edge_index, p=0.2, training=True)
+
+            # Node Dropping
+            # Drop nodes with probability 0.2(hard coded) for the current batch
+            if hasattr(batch, "x"):
+                batch.x, batch.edge_index, _ = dropout_node(batch.x, batch.edge_index, p=0.2, training=True)   
+            
+            
             outputs = model(batch.x, batch.edge_index, batch.batch)
-
-
+            optimizer.zero_grad()
             loss = criterion(outputs, batch.y)
             loss.backward()
             optimizer.step()
@@ -193,9 +207,10 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, device, l
         avg_train_loss = total_train_loss / len(train_loader)
         train_metrics = compute_metrics(torch.cat(all_train_predictions), torch.cat(all_train_labels), num_classes, device)
 
-        print(f"Epoch {epoch}, Train Loss: {avg_train_loss:.4f}, Train Acc: {train_metrics['accuracy']:.2f}%, Train F1: {train_metrics['f1_score']}")
+        print(f"Epoch {epoch}, Train Loss: {avg_train_loss:.4f},  Acc: {train_metrics['accuracy']:.2f}%,  F1: {train_metrics['f1_score']},  Precision: {train_metrics['precision']:.2f},  Recall: {train_metrics['recall']:.2f}")
         writer.add_scalar("Loss/train", avg_train_loss, epoch)
         writer.add_scalar("Accuracy/train", train_metrics["accuracy"], epoch)
+        writer.add_scalar("F1/train", train_metrics["f1_score"], epoch)
 
         if log_with_mlflow:
             with mlflow.start_run(run_id=run_id):
@@ -246,7 +261,7 @@ def eval_model(model, data_loader, criterion, device, num_classes, epoch):
     """
     model.eval()
     total_val_loss = 0
-    all_val_predictions, all_val_labels = [], []
+    all_val_predictions, all_val_labels,all_val_conf = [], [], []
 
     with torch.no_grad():
         for batch in data_loader:
@@ -256,13 +271,24 @@ def eval_model(model, data_loader, criterion, device, num_classes, epoch):
 
             total_val_loss += loss.item()
             _, predicted = torch.max(outputs, 1)
+
             all_val_predictions.append(predicted)
             all_val_labels.append(batch.y)
+
+            confidences = F.softmax(outputs, dim=1).max(dim=1).values
+            all_val_conf.append(confidences)
+
 
     avg_val_loss = total_val_loss / len(data_loader)
     val_metrics = compute_metrics(
         torch.cat(all_val_predictions), torch.cat(all_val_labels), num_classes, device
     )
+    all_val_conf = torch.cat(all_val_conf)
+    avg_confidence = all_val_conf.mean().item()
 
-    print(f"Epoch {epoch}, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_metrics['accuracy']:.2f}%, Val F1: {val_metrics['f1_score']}")
+
+    print(f"Epoch {epoch}, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_metrics['accuracy']:.2f}%, Val F1: {val_metrics['f1_score']}, Val Precision: {val_metrics['precision']:.2f}, Val Recall: {val_metrics['recall']:.2f}")
+    print(f"Average Prediction Confidence: {avg_confidence:.4f}")
+    print(f"Class-wise Metrics: ")
+    
     return avg_val_loss, val_metrics

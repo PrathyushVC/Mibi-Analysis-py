@@ -95,11 +95,11 @@ def create_graph(df, expressions, cell_type_col=None,
     graphs = []
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # Initialize embedding only if cell_type_col is specified
+
     if cell_type_col:
         num_cell_types = df[cell_type_col].n_unique()
         if num_cell_types<=4:
-
-            
+             one_hot_encode_to_array(df=df, target_col=cell_type_col)      
         else:
             cell_type_embedding = CellTypeEmbedding(num_cell_types, embedding_dim)
         cell_type_index = _create_global_cell_mapping(df, cell_type_col)
@@ -116,7 +116,6 @@ def create_graph(df, expressions, cell_type_col=None,
         graphs.append(data)
     return graphs
 
-#Breaking due to size var
 def _process_single_fov(df_fov, expressions, cell_type_col, 
                        radius, x_pos, y_pos, cell_type_embedding, 
                        cell_type_index,group_col, binarize, device):
@@ -204,9 +203,21 @@ def create_graph_patches(df, expressions, stride=100, cell_type_col=None,
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # Initialize embedding only if cell_type_col is specified
     if cell_type_col:
+
+    # Number of unique cell types
+        num_cell_types = df.select(pl.col(cell_type_col).n_unique()).item()
+
+   
+    if cell_type_col:
         num_cell_types = df[cell_type_col].n_unique()
-        cell_type_embedding = CellTypeEmbedding(num_cell_types, embedding_dim)
+
+
+        if num_cell_types<=4:
+             one_hot_encode_to_array(df=df, target_col=cell_type_col)      
+        else:
+            cell_type_embedding = CellTypeEmbedding(num_cell_types, embedding_dim)
         cell_type_index = _create_global_cell_mapping(df, cell_type_col)
+
     else:
         cell_type_embedding = None
 
@@ -239,9 +250,10 @@ def _process_single_fov_patches(df_fov, expressions, cell_type_col,
     
 
 
-    x_min, x_max = df_fov.select(pl.col(x_pos).min()).to_numpy()[0][0], df_fov.select(pl.col(x_pos).max()).to_numpy()[0][0]
-    y_min, y_max = df_fov.select(pl.col(y_pos).min()).to_numpy()[0][0], df_fov.select(pl.col(y_pos).max()).to_numpy()[0][0]
-
+    x_min = df_fov.select(pl.col(x_pos).min()).to_numpy()[0][0]
+    x_max = df_fov.select(pl.col(x_pos).max()).to_numpy()[0][0]
+    y_min = df_fov.select(pl.col(y_pos).min()).to_numpy()[0][0]
+    y_max = df_fov.select(pl.col(y_pos).max()).to_numpy()[0][0]
     if x_max-1024<=0:
         grid_max=1024
     else:
@@ -280,7 +292,8 @@ def _process_single_fov_patches(df_fov, expressions, cell_type_col,
 
             if cell_type_col:
                 patch_df = _map_cell_types_to_indices(patch_df, cell_type_col, cell_type_index)
-                cell_type_indices = torch.tensor(patch_df[cell_type_col + '_int_map'].to_numpy(), dtype=torch.long)
+                cell_type_indices = torch.tensor(
+                    patch_df[cell_type_col + '_int_map'].to_numpy(), dtype=torch.long)
                 cell_embeddings = cell_type_embedding(cell_type_indices)
                 node_features = torch.cat([node_features, cell_embeddings], dim=1)
 
@@ -304,7 +317,11 @@ def _create_global_cell_mapping(df, cell_type_col):
 
 
 def _map_cell_types_to_indices(df, cell_type_col, cell_type_to_index):
-    df = df.with_columns(pl.col(cell_type_col).replace(cell_type_to_index).cast(pl.Int32).alias(cell_type_col + '_int_map'))
+    df = df.with_columns(
+        pl.col(cell_type_col)
+        .replace(cell_type_to_index)
+        .cast(pl.Int32)
+        .alias(cell_type_col + '_int_map'))
     return df
 
 def _binarize_group(group_data):
@@ -410,7 +427,7 @@ def remapping(df, column_name):
     return df
 
 def remapping_simplified(df, column_name):
-    # Define the simplified groups as a dictionary
+    # Define the simplified groups as a dictionary and remap. 
     simplified_mapping = {
         'CD4 T cell': 'Lymphocytes',
         'Memory_CD4_T_Cells': 'Lymphocytes',
@@ -456,10 +473,3 @@ if __name__ == "__main__":
     print(torch_geometric.__version__)
     
     print(" If you are reading this you messed up.")
-
-
-
-
-    
-
-
